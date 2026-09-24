@@ -1,4 +1,6 @@
 pandas
+openpyxl
+pyarrow
 pyyaml
 sqlalchemy
 psycopg2-binary
