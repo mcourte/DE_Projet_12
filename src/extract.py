@@ -105,13 +105,23 @@ def _postgres_engine():
     return create_engine(url)
 
 
+def qualified_table(schema: Optional[str], table: str) -> str:
+    """Qualifie un nom de table par son schéma quand il y en a un — évite
+    de casser sur les moteurs (ex. SQLite en test) qui n'ont pas de
+    notion de schéma.
+    """
+    return f'"{schema}".{table}' if schema else table
+
+
 def extract_activities_from_postgres(schema: Optional[str] = None) -> pd.DataFrame:
     """Lit l'historique d'activités depuis la base opérationnelle
     (PostgreSQL) pour matérialisation en bronze.
     """
-    schema = schema or get_param("postgres.schema_operational", default="public")
+    schema = schema if schema is not None else get_param(
+        "postgres.schema_operational", default="public"
+    )
     engine = _postgres_engine()
-    query = f'select * from "{schema}".activities'
+    query = f"select * from {qualified_table(schema, 'activities')}"
     return pd.read_sql(query, engine)
 
 
