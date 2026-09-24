@@ -1,0 +1,13 @@
+pandas
+pyyaml
+sqlalchemy
+psycopg2-binary
+googlemaps
+slack-sdk
+nats-py
+duckdb
+dbt-core
+dbt-duckdb
+dagster
+dagster-webserver
+python-dotenv
