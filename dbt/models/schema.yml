@@ -8,7 +8,8 @@ models:
       - name: moyen_deplacement
         tests:
           - accepted_values:
-              values: ["Transports en commun", "véhicule thermique/électrique", "Marche/running", "Vélo/Trottinette/Autres"]
+              arguments:
+                values: ["Transports en commun", "véhicule thermique/électrique", "Marche/running", "Vélo/Trottinette/Autres"]
 
   - name: bronze_activities
     columns:
@@ -17,8 +18,9 @@ models:
       - name: distance_m
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              inclusive: true
+              arguments:
+                min_value: 0
+                inclusive: true
               config:
                 where: "distance_m is not null"
 
@@ -36,5 +38,6 @@ models:
       - name: montant_prime
         tests:
           - dbt_utils.accepted_range:
-              min_value: 0
-              inclusive: true
+              arguments:
+                min_value: 0
+                inclusive: true

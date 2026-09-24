@@ -8,6 +8,8 @@ data/warehouse.duckdb
 dbt/target/
 dbt/logs/
 dbt/profiles.yml
+dbt/dbt_packages/
+dbt/.user.yml
 
 .venv/
 __pycache__/
