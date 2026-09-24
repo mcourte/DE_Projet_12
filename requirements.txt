@@ -11,3 +11,4 @@ dbt-duckdb
 dagster
 dagster-webserver
 python-dotenv
+pytest
