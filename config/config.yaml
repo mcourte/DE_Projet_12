@@ -1,0 +1,62 @@
+# Paramètres métier du POC Avantages Sportifs
+# Aucun de ces seuils ne doit être codé en dur ailleurs dans le code :
+# ils sont amenés à évoluer (cf. note de cadrage, section 2).
+# Ils sont aussi exposés à dbt via `vars:` (voir dbt/dbt_project.yml)
+# pour que les formules en SQL et en Python restent alignées.
+
+entreprise:
+  adresse: "1362 Av. des Platanes, 34970 Lattes"
+
+formule_prime:
+  taux_prime: 0.05          # 5% du salaire annuel brut
+  modes_actifs:
+    - "Marche/running"
+    - "Vélo/Trottinette/Autres"
+
+formule_bien_etre:
+  seuil_activites_par_an: 15
+  jours_accordes: 5
+  fenetre_glissante_mois: 12
+
+validation_distance:
+  max_km:
+    "Marche/running": 15
+    "Vélo/Trottinette/Autres": 25
+
+sources:
+  fichier_rh: "data/raw/Donnees_RH.xlsx"
+  fichier_sportif: "data/raw/Donnees_Sportive.xlsx"
+
+# Base opérationnelle : écriture des activités générées + référentiels.
+# C'est aussi là qu'atterrit la couche gold (schéma dédié) pour que
+# Power BI se connecte simplement en natif, sans piloter DuckDB.
+postgres:
+  host: "localhost"
+  port: 5432
+  database: "sportdata"
+  schema_operational: "public"
+  schema_gold: "gold"
+  schema_monitoring: "monitoring"
+
+# Bus d'événements : NATS remplace Debezium+Redpanda. Le générateur
+# publie directement l'événement au moment de l'écriture (pas de CDC :
+# on maîtrise le générateur, inutile de capter des changements "externes").
+event_bus:
+  provider: "nats"
+  url: "nats://localhost:4222"
+  subject_activities: "activities.new"
+
+# Entrepôt analytique : DuckDB (embarqué) + dbt pour bronze/silver/gold,
+# à la place de Spark + Delta Lake — inutile pour un volume de quelques
+# milliers de lignes.
+warehouse:
+  duckdb_path: "data/warehouse.duckdb"
+  bronze_path: "data/bronze"
+  dbt_project_dir: "dbt"
+
+slack:
+  channel: "#pratique-sportive"
+
+monitoring:
+  volumetry_tolerance_pct: 20
+  freshness_max_delay_hours: 24
