@@ -1,0 +1,40 @@
+version: 2
+
+models:
+  - name: bronze_employees
+    columns:
+      - name: id_salarie
+        tests: [unique, not_null]
+      - name: moyen_deplacement
+        tests:
+          - accepted_values:
+              values: ["Transports en commun", "véhicule thermique/électrique", "Marche/running", "Vélo/Trottinette/Autres"]
+
+  - name: bronze_activities
+    columns:
+      - name: id_salarie
+        tests: [not_null]
+      - name: distance_m
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+              config:
+                where: "distance_m is not null"
+
+  - name: silver_employees_validated
+    columns:
+      - name: id_salarie
+        tests: [unique, not_null]
+      - name: anomalie_distance
+        tests: [not_null]
+
+  - name: gold_kpi
+    columns:
+      - name: id_salarie
+        tests: [unique, not_null]
+      - name: montant_prime
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true

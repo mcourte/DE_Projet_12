@@ -1,0 +1,27 @@
+name: 'sport_data_solution'
+version: '1.0.0'
+config-version: 2
+
+profile: 'sport_data_solution'
+
+model-paths: ["models"]
+test-paths: ["tests"]
+
+# Paramètres métier — dupliqués depuis config/config.yaml pour rester
+# accessibles en Jinja dans les modèles SQL. Idéalement synchronisés par
+# src/config.py au lancement du run (cf. src/orchestration/dagster_definitions.py).
+vars:
+  taux_prime: 0.05
+  seuil_activites_par_an: 15
+  jours_bien_etre: 5
+  max_km_marche: 15
+  max_km_velo: 25
+
+models:
+  sport_data_solution:
+    bronze:
+      +materialized: view
+    silver:
+      +materialized: table
+    gold:
+      +materialized: table

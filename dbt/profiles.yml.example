@@ -1,0 +1,12 @@
+# Copier ce fichier en `profiles.yml` (ignoré par git) et l'adapter.
+# DuckDB est un moteur embarqué : pas de serveur à démarrer, juste un fichier.
+
+sport_data_solution:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "../data/warehouse.duckdb"
+      extensions:
+        - parquet
+        - postgres   # utilisé par export_gold_to_postgres pour écrire la couche gold
