@@ -1,4 +1,5 @@
 import shutil
+import socket
 from pathlib import Path
 
 import pytest
@@ -6,6 +7,20 @@ import pytest
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _FIXTURES_BRONZE = _PROJECT_ROOT / "tests" / "fixtures" / "bronze"
 _REAL_BRONZE = _PROJECT_ROOT / "data" / "bronze"
+
+
+def _postgres_is_reachable(host: str = "localhost", port: int = 5432, timeout: float = 0.5) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+postgres_available = pytest.mark.skipif(
+    not _postgres_is_reachable(),
+    reason="PostgreSQL non joignable sur localhost:5432 (lancer `docker compose up -d postgres`)",
+)
 
 
 @pytest.fixture
