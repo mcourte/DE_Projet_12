@@ -7,24 +7,63 @@ sources en Parquet (bronze), et exporter la couche gold finale vers
 PostgreSQL pour que Power BI s'y connecte nativement.
 """
 
-# TODO :
-# 1. upsert_employee_referential : "INSERT ... ON CONFLICT (id_salarie) DO UPDATE" côté PostgreSQL
-# 2. export_gold_to_postgres : lire la table DuckDB, pandas.to_sql(if_exists="replace") dans le schéma gold
-# 3. Créer le schéma gold au besoin : CREATE SCHEMA IF NOT EXISTS gold
-
+import duckdb
 import pandas as pd
 
+from src.config import get_param
+from src.extract import _postgres_engine, qualified_table
+from src.transform import _duckdb_path
 
-def upsert_employee_referential(df: pd.DataFrame) -> None:
+
+def upsert_employee_referential(df: pd.DataFrame) -> int:
     """Met à jour le référentiel salarié dans PostgreSQL (schéma public)
-    sans dupliquer les lignes déjà présentes.
+    sans dupliquer les lignes déjà présentes. Retourne le nombre de
+    lignes traitées.
     """
-    raise NotImplementedError
+    from sqlalchemy import text
+
+    if df.empty:
+        return 0
+
+    engine = _postgres_engine()
+    schema = get_param("postgres.schema_operational", default="public")
+    table = qualified_table(schema, "employees")
+
+    columns = list(df.columns)
+    non_key_columns = [c for c in columns if c != "id_salarie"]
+    col_list = ", ".join(columns)
+    placeholders = ", ".join(f":{c}" for c in columns)
+    update_clause = ", ".join(f"{c} = excluded.{c}" for c in non_key_columns)
+
+    query = text(
+        f"insert into {table} ({col_list}) values ({placeholders}) "
+        f"on conflict (id_salarie) do update set {update_clause}"
+    )
+    with engine.begin() as conn:
+        conn.execute(query, df.to_dict(orient="records"))
+
+    return len(df)
 
 
-def export_gold_to_postgres(table: str = "gold_kpi") -> None:
+def export_gold_to_postgres(table: str = "gold_kpi") -> int:
     """Lit une table gold depuis DuckDB et l'écrit dans le schéma
-    `gold` de PostgreSQL (cf. config.yaml -> postgres.schema_gold),
-    seul point de sortie que Power BI a besoin de connaître.
+    `gold` de PostgreSQL — seul point que Power BI a besoin de connaître.
+    Retourne le nombre de lignes exportées.
     """
-    raise NotImplementedError
+    from sqlalchemy import text
+
+    con = duckdb.connect(str(_duckdb_path()), read_only=True)
+    try:
+        df = con.sql(f"select * from {table}").df()
+    finally:
+        con.close()
+
+    engine = _postgres_engine()
+    schema = get_param("postgres.schema_gold", default="gold")
+
+    if schema:
+        with engine.begin() as conn:
+            conn.execute(text(f'create schema if not exists "{schema}"'))
+
+    df.to_sql(table, engine, schema=schema or None, if_exists="replace", index=False)
+    return len(df)
