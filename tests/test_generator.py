@@ -52,6 +52,20 @@ def test_generate_activity_history_stays_within_bounds():
     assert (df["type"] == "Runing").all()
 
 
+def test_generate_activity_history_has_no_overlapping_activities():
+    start, end = datetime(2024, 1, 1), datetime(2024, 12, 31)
+    # Beaucoup de graines différentes, pour augmenter les chances de
+    # générer un cas de chevauchement si le filtre ne marchait pas.
+    for seed in range(30):
+        df = generator.generate_activity_history(1, "Runing", start, end, rng=random.Random(seed))
+        if len(df) < 2:
+            continue
+        df_sorted = df.sort_values("date_debut").reset_index(drop=True)
+        assert (df_sorted["date_debut"].iloc[1:].values >= df_sorted["date_fin"].iloc[:-1].values).all(), (
+            f"chevauchement detecte avec seed={seed}"
+        )
+
+
 def _sqlite_engine_with_activities_table():
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as conn:

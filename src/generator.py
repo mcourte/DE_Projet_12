@@ -132,7 +132,23 @@ def generate_activity_history(
     if not records:
         return pd.DataFrame(columns=_ACTIVITY_COLUMNS)
 
+    records = _drop_overlapping_records(records)
     return pd.DataFrame(records, columns=_ACTIVITY_COLUMNS)
+
+
+def _drop_overlapping_records(records: list) -> list:
+    """Un salarié ne peut pas être sur deux activités en même temps —
+    supprime (glouton, par ordre chronologique) les activités générées
+    qui chevaucheraient la précédente. Trouvé en générant un historique
+    réaliste à pleine échelle (5000+ activités) : sans ce filtre, le
+    test dbt `no_overlapping_activities` détecte de vrais chevauchements.
+    """
+    records_sorted = sorted(records, key=lambda r: r["date_debut"])
+    kept = [records_sorted[0]]
+    for record in records_sorted[1:]:
+        if record["date_debut"] >= kept[-1]["date_fin"]:
+            kept.append(record)
+    return kept
 
 
 def seed_operational_db(activities_df: pd.DataFrame) -> int:
