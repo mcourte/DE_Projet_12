@@ -9,9 +9,16 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 
 DEFAULT_CONFIG_PATH = "config/config.yaml"
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Charge .env une seule fois, au premier import de ce module — c'est le
+# point d'entrée commun à tout le reste (generator, extract, notifier...),
+# donc le seul endroit nécessaire pour que SLACK_BOT_TOKEN,
+# GOOGLE_MAPS_API_KEY, POSTGRES_* soient disponibles partout ailleurs.
+load_dotenv(_PROJECT_ROOT / ".env")
 
 _cache: dict[str, dict] = {}
 
