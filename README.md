@@ -42,6 +42,9 @@ src/
 tests/                        Tests unitaires (mirroring de src/)
 notebooks/                    Exploration / prototypage
 powerbi/                      Modèle et rapport Power BI
+grafana/
+  provisioning/              Source de données PostgreSQL + chargeur de dashboards (auto)
+  dashboards/                Dashboard de monitoring du pipeline (JSON versionné)
 docs/
   RAPPORT.md                  Note de synthèse (contexte, formules, architecture, modules)
   A_FAIRE_notion.md            Checklist + formules + données manquantes (format Notion)
@@ -57,6 +60,20 @@ pip install -r requirements.txt
 cp dbt/profiles.yml.example dbt/profiles.yml
 cd dbt && dbt deps && dbt build
 ```
+
+## Utilisation
+
+```bash
+cp .env.example .env                      # puis renseigner SLACK_BOT_TOKEN et GOOGLE_MAPS_API_KEY
+python -m src.pipeline run                # extraction + distances Google Maps + dbt + tests + export gold
+python -m src.pipeline replay --taux-prime 0.10   # rejoue l'historique avec un nouveau taux, puis exporte
+python -m src.notifier                    # processus long : écoute NATS et publie sur Slack
+```
+
+- **Power BI** : se connecter à PostgreSQL `localhost:5432`, base `sportdata`, table `gold.gold_kpi`, puis *Actualiser*.
+- **Grafana** : http://localhost:3000 (dashboard « Monitoring du pipeline »). La source de données et le
+  dashboard sont provisionnés automatiquement depuis `grafana/` ; les métriques viennent de `monitoring.pipeline_runs`.
+- Alertes d'échec : créer le channel Slack `#pipeline-alertes` et y inviter le bot.
 
 ## Paramètres
 
