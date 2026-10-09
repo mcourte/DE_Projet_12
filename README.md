@@ -73,7 +73,7 @@ python -m src.notifier                    # processus long : écoute NATS et pub
 - **Power BI** : se connecter à PostgreSQL `localhost:5432`, base `sportdata`, table `gold.gold_kpi`, puis *Actualiser*.
 - **Grafana** : http://localhost:3000 (dashboard « Monitoring du pipeline »). La source de données et le
   dashboard sont provisionnés automatiquement depuis `grafana/` ; les métriques viennent de `monitoring.pipeline_runs`.
-- Alertes d'échec : créer le channel Slack `#pipeline-alertes` et y inviter le bot.
+- Alertes d'échec : créer le channel Slack `#pipeline_alerte` et y inviter le bot.
 
 ## Paramètres
 

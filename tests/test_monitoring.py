@@ -76,7 +76,7 @@ def test_check_volumetry_drift_within_and_outside_range(monkeypatch):
 
 def test_send_alert_uses_dedicated_channel_and_severity(monkeypatch):
     sent = []
-    monkeypatch.setattr(monitoring, "get_param", lambda key, default=None: "#pipeline-alertes")
+    monkeypatch.setattr(monitoring, "get_param", lambda key, default=None: "#pipeline_alerte")
 
     import src.notifier as notifier_module
 
@@ -84,6 +84,6 @@ def test_send_alert_uses_dedicated_channel_and_severity(monkeypatch):
 
     monitoring.send_alert("dbt test a echoue", severity="critical")
 
-    assert sent[0][0] == "#pipeline-alertes"
+    assert sent[0][0] == "#pipeline_alerte"
     assert "[CRITICAL]" in sent[0][1]
     assert "dbt test a echoue" in sent[0][1]

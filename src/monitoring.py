@@ -140,5 +140,5 @@ def send_alert(message: str, severity: str = "warning") -> None:
     """
     from src.notifier import send_slack_message
 
-    channel = get_param("slack.alert_channel", default="#pipeline-alertes")
+    channel = get_param("slack.alert_channel", default="#pipeline_alerte")
     send_slack_message(channel, f"[{severity.upper()}] {message}")

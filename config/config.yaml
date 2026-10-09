@@ -56,7 +56,7 @@ warehouse:
 
 slack:
   channel: "#pratique-sportive"
-  alert_channel: "#pipeline-alertes"
+  alert_channel: "#pipeline_alerte"
 
 monitoring:
   volumetry_tolerance_pct: 20
