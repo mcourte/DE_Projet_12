@@ -6,6 +6,12 @@
 select
     e.id_salarie,
     e.bu,
+    e.moyen_deplacement,
+    e.distance_domicile_bureau_km,
+    -- Formule A : true quand la distance domicile-bureau est impossible
+    -- pour le mode déclaré (ex. 50 km à pied). Remontée telle quelle pour
+    -- que Power BI / Postgres puissent lister les déclarations à vérifier.
+    e.anomalie_distance,
     p.eligible_prime,
     p.montant_prime,
     p.taux_prime_applique,
