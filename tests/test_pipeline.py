@@ -5,7 +5,7 @@ from src import pipeline
 
 
 def _patch_happy_path(monkeypatch, calls):
-    monkeypatch.setattr(pipeline.extract, "extract_rh_referential", lambda: pd.DataFrame({"a": [1, 2]}))
+    monkeypatch.setattr(pipeline.extract, "extract_employees_with_distance", lambda: pd.DataFrame({"a": [1, 2]}))
     monkeypatch.setattr(pipeline.extract, "extract_sport_referential", lambda: pd.DataFrame({"a": [1]}))
     monkeypatch.setattr(pipeline.extract, "extract_activities_from_postgres", lambda: pd.DataFrame({"a": [1, 2, 3]}))
     monkeypatch.setattr(pipeline.extract, "write_bronze_parquet", lambda df, name: calls.append(f"write:{name}"))
@@ -33,7 +33,7 @@ def test_run_pipeline_aborts_when_extraction_fails(monkeypatch):
     calls = []
     _patch_happy_path(monkeypatch, calls)
     monkeypatch.setattr(
-        pipeline.extract, "extract_rh_referential", lambda: (_ for _ in ()).throw(RuntimeError("xlsx illisible"))
+        pipeline.extract, "extract_employees_with_distance", lambda: (_ for _ in ()).throw(RuntimeError("xlsx illisible"))
     )
 
     pipeline.run_pipeline()
@@ -70,3 +70,58 @@ def test_handle_pipeline_failure_sends_critical_alert(monkeypatch):
     assert "export_gold" in message
     assert "connexion refusee" in message
     assert severity == "critical"
+
+
+def test_replay_pipeline_replays_then_exports(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        pipeline.transform, "replay_historical_kpis", lambda params: calls.append(("replay", params)) or pd.DataFrame()
+    )
+    monkeypatch.setattr(pipeline.load, "export_gold_to_postgres", lambda: calls.append("export_gold") or 5)
+    monkeypatch.setattr(pipeline.monitoring, "log_run_metrics", lambda *a, **k: None)
+
+    pipeline.replay_pipeline({"taux_prime": 0.10})
+
+    assert calls == [("replay", {"taux_prime": 0.10}), "export_gold"]
+
+
+def test_replay_pipeline_does_not_export_when_replay_fails(monkeypatch):
+    calls = []
+
+    def failing_replay(params):
+        raise RuntimeError("dbt a echoue")
+
+    monkeypatch.setattr(pipeline.transform, "replay_historical_kpis", failing_replay)
+    monkeypatch.setattr(pipeline.load, "export_gold_to_postgres", lambda: calls.append("export_gold"))
+    monkeypatch.setattr(pipeline.monitoring, "log_run_metrics", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline.monitoring, "send_alert", lambda *a, **k: None)
+
+    pipeline.replay_pipeline({"taux_prime": 0.10})
+
+    assert "export_gold" not in calls
+
+
+def test_handle_pipeline_failure_survives_alert_failure(monkeypatch, capsys):
+    def broken_alert(message, severity):
+        raise RuntimeError("channel_not_found")
+
+    monkeypatch.setattr(pipeline.monitoring, "send_alert", broken_alert)
+
+    pipeline.handle_pipeline_failure("export_gold", RuntimeError("boom"))  # ne doit pas lever
+
+    err = capsys.readouterr().err
+    assert "boom" in err
+    assert "channel_not_found" in err
+
+
+def test_failed_step_is_logged_with_failed_status(monkeypatch):
+    logged = []
+    _patch_happy_path(monkeypatch, [])
+    monkeypatch.setattr(pipeline.monitoring, "log_run_metrics", lambda *a, **k: logged.append((a[1], k.get("status", "success"))))
+    monkeypatch.setattr(
+        pipeline.extract, "extract_employees_with_distance", lambda: (_ for _ in ()).throw(RuntimeError("xlsx"))
+    )
+
+    pipeline.run_pipeline()
+
+    assert ("extract_rh", "failed") in logged

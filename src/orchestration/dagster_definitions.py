@@ -21,7 +21,7 @@ def bronze_employees(context: AssetExecutionContext) -> None:
     """Extrait le référentiel RH + géocodage/distance, écrit en Parquet
     (cf. src/extract.py -> extract_rh_referential, write_bronze_parquet).
     """
-    df = extract.extract_rh_referential()
+    df = extract.extract_employees_with_distance()
     extract.write_bronze_parquet(df, "employees")
     context.add_output_metadata({"row_count": len(df)})
 

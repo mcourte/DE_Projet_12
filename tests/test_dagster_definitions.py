@@ -6,7 +6,7 @@ from src.orchestration import dagster_definitions as dd
 
 
 def _patch_happy_path(monkeypatch, calls):
-    monkeypatch.setattr(dd.extract, "extract_rh_referential", lambda: pd.DataFrame({"a": [1, 2]}))
+    monkeypatch.setattr(dd.extract, "extract_employees_with_distance", lambda: pd.DataFrame({"a": [1, 2]}))
     monkeypatch.setattr(dd.extract, "extract_sport_referential", lambda: pd.DataFrame({"a": [1]}))
     monkeypatch.setattr(dd.extract, "extract_activities_from_postgres", lambda: pd.DataFrame({"a": [1, 2, 3]}))
     monkeypatch.setattr(dd.extract, "write_bronze_parquet", lambda df, name: calls.append(f"write:{name}"))
