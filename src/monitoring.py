@@ -28,10 +28,8 @@ def _pipeline_runs_table():
 def _ensure_pipeline_runs_table(engine, table: str) -> None:
     from sqlalchemy import text
 
-    id_column = (
-        "id serial primary key" if engine.dialect.name == "postgresql"
-        else "id integer primary key autoincrement"
-    )
+    is_postgres = engine.dialect.name == "postgresql"
+    id_column = "id serial primary key" if is_postgres else "id integer primary key autoincrement"
     ddl = f"""
         create table if not exists {table} (
             {id_column},
@@ -39,16 +37,24 @@ def _ensure_pipeline_runs_table(engine, table: str) -> None:
             step text,
             row_count integer,
             duration_seconds double precision,
+            status text default 'success',
             created_at timestamp default current_timestamp
         )
     """
     with engine.begin() as conn:
+        if is_postgres and "." in table:
+            schema = table.split(".")[0].strip('"')
+            conn.execute(text(f'create schema if not exists "{schema}"'))
         conn.execute(text(ddl))
 
 
-def log_run_metrics(run_id: str, step: str, row_count: int, duration: float) -> None:
+def log_run_metrics(
+    run_id: str, step: str, row_count: int, duration: float, status: str = "success"
+) -> None:
     """Enregistre les métriques d'exécution de chaque étape (volume
     traité, durée, statut) dans monitoring.pipeline_runs (PostgreSQL).
+    `status` vaut "success" ou "failed" — c'est ce qui permet à Grafana
+    d'afficher un taux de succès des exécutions.
     """
     from sqlalchemy import text
 
@@ -57,11 +63,14 @@ def log_run_metrics(run_id: str, step: str, row_count: int, duration: float) -> 
     _ensure_pipeline_runs_table(engine, table)
 
     query = text(
-        f"insert into {table} (run_id, step, row_count, duration_seconds) "
-        f"values (:run_id, :step, :row_count, :duration)"
+        f"insert into {table} (run_id, step, row_count, duration_seconds, status) "
+        f"values (:run_id, :step, :row_count, :duration, :status)"
     )
     with engine.begin() as conn:
-        conn.execute(query, {"run_id": run_id, "step": step, "row_count": row_count, "duration": duration})
+        conn.execute(
+            query,
+            {"run_id": run_id, "step": step, "row_count": row_count, "duration": duration, "status": status},
+        )
 
 
 def check_data_freshness(table: str) -> bool:

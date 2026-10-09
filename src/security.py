@@ -77,10 +77,8 @@ def _audit_log_table():
 def _ensure_audit_log_table(engine, table: str) -> None:
     from sqlalchemy import text
 
-    id_column = (
-        "id serial primary key" if engine.dialect.name == "postgresql"
-        else "id integer primary key autoincrement"
-    )
+    is_postgres = engine.dialect.name == "postgresql"
+    id_column = "id serial primary key" if is_postgres else "id integer primary key autoincrement"
     ddl = f"""
         create table if not exists {table} (
             {id_column},
@@ -91,6 +89,9 @@ def _ensure_audit_log_table(engine, table: str) -> None:
         )
     """
     with engine.begin() as conn:
+        if is_postgres and "." in table:
+            schema = table.split(".")[0].strip('"')
+            conn.execute(text(f'create schema if not exists "{schema}"'))
         conn.execute(text(ddl))
 
 
