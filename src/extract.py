@@ -202,6 +202,63 @@ def compute_commute_distance(
     return element["distance"]["value"] / 1000.0
 
 
+_DISTANCE_CACHE_PATH = _PROJECT_ROOT / "data" / "bronze" / ".distance_cache.json"
+_MAX_DISTANCE_FAILURE_RATIO = 0.10
+
+
+def enrich_with_commute_distance(df: pd.DataFrame, _client=None) -> pd.DataFrame:
+    """Ajoute `distance_domicile_bureau_km` au référentiel RH : géocodage
+    de l'adresse puis distance selon le mode déclaré (API Google Maps).
+
+    Les résultats sont mis en cache sur disque (adresse + mode) pour ne
+    pas refacturer l'API à chaque exécution du pipeline. Une adresse
+    non résolue donne une distance vide ; si plus de 10 % des lignes
+    échouent, on lève une erreur plutôt que de laisser passer des
+    éligibilités à la prime non vérifiées.
+    """
+    cache = {}
+    if _DISTANCE_CACHE_PATH.exists():
+        with open(_DISTANCE_CACHE_PATH, "r", encoding="utf-8") as f:
+            cache = json.load(f)
+
+    distances = []
+    failures = 0
+    for _, row in df.iterrows():
+        key = f"{row['adresse_domicile']}|{row['moyen_deplacement']}"
+        if key in cache:
+            distances.append(cache[key])
+            continue
+        try:
+            coords = geocode_address(row["adresse_domicile"], _client=_client)
+            km = compute_commute_distance(coords, row["moyen_deplacement"], _client=_client)
+        except Exception:
+            failures += 1
+            distances.append(None)
+            continue
+        cache[key] = km
+        distances.append(km)
+
+    _DISTANCE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(_DISTANCE_CACHE_PATH, "w", encoding="utf-8") as f:
+        json.dump(cache, f, ensure_ascii=False)
+
+    if len(df) and failures / len(df) > _MAX_DISTANCE_FAILURE_RATIO:
+        raise RuntimeError(
+            f"Géocodage en échec pour {failures}/{len(df)} salariés "
+            f"(seuil {_MAX_DISTANCE_FAILURE_RATIO:.0%}) — vérifier GOOGLE_MAPS_API_KEY et le quota."
+        )
+
+    result = df.copy()
+    result["distance_domicile_bureau_km"] = distances
+    return result
+
+
+def extract_employees_with_distance(path: Optional[str] = None, _client=None) -> pd.DataFrame:
+    """Référentiel RH complet prêt pour la couche bronze : fichier RH
+    nettoyé + distance domicile-bureau réelle."""
+    return enrich_with_commute_distance(extract_rh_referential(path), _client=_client)
+
+
 def write_bronze_parquet(df: pd.DataFrame, name: str) -> str:
     """Écrit un DataFrame en Parquet sous data/bronze/<name>/, lu
     ensuite par les modèles dbt `bronze_*` via read_parquet(). Renvoie

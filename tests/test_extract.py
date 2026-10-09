@@ -89,3 +89,55 @@ def test_compute_commute_distance_not_found_raises():
     client = _FakeDistanceClient(status="NOT_FOUND")
     with pytest.raises(ValueError):
         extract.compute_commute_distance((43.6, 3.9), "Marche/running", _client=client)
+
+
+class _FakeMapsClient(_FakeGeocodeClient, _FakeDistanceClient):
+    def __init__(self, fail_addresses=()):
+        _FakeGeocodeClient.__init__(self)
+        _FakeDistanceClient.__init__(self, meters=12000)
+        self.fail_addresses = set(fail_addresses)
+
+    def geocode(self, address):
+        if address in self.fail_addresses:
+            return []
+        return _FakeGeocodeClient.geocode(self, address)
+
+
+def _employees(addresses):
+    return pd.DataFrame(
+        {"adresse_domicile": addresses, "moyen_deplacement": ["Vélo/Trottinette/Autres"] * len(addresses)}
+    )
+
+
+def test_enrich_with_commute_distance_adds_km_column_and_caches(tmp_path, monkeypatch):
+    monkeypatch.setattr(extract, "_GEOCODE_CACHE_PATH", tmp_path / "geo.json")
+    monkeypatch.setattr(extract, "_DISTANCE_CACHE_PATH", tmp_path / "dist.json")
+    client = _FakeMapsClient()
+
+    result = extract.enrich_with_commute_distance(_employees(["a", "b"]), _client=client)
+    assert list(result["distance_domicile_bureau_km"]) == [12.0, 12.0]
+    assert client.calls == 2
+
+    # 2e passage : tout vient du cache, aucun nouvel appel API
+    extract.enrich_with_commute_distance(_employees(["a", "b"]), _client=client)
+    assert client.calls == 2
+
+
+def test_enrich_with_commute_distance_tolerates_few_failures(tmp_path, monkeypatch):
+    monkeypatch.setattr(extract, "_GEOCODE_CACHE_PATH", tmp_path / "geo.json")
+    monkeypatch.setattr(extract, "_DISTANCE_CACHE_PATH", tmp_path / "dist.json")
+    client = _FakeMapsClient(fail_addresses=["introuvable"])
+
+    addresses = [f"adresse {i}" for i in range(19)] + ["introuvable"]  # 5 % d'échec
+    result = extract.enrich_with_commute_distance(_employees(addresses), _client=client)
+
+    assert result["distance_domicile_bureau_km"].isna().sum() == 1
+
+
+def test_enrich_with_commute_distance_raises_when_too_many_failures(tmp_path, monkeypatch):
+    monkeypatch.setattr(extract, "_GEOCODE_CACHE_PATH", tmp_path / "geo.json")
+    monkeypatch.setattr(extract, "_DISTANCE_CACHE_PATH", tmp_path / "dist.json")
+    client = _FakeMapsClient(fail_addresses=["x", "y"])
+
+    with pytest.raises(RuntimeError):
+        extract.enrich_with_commute_distance(_employees(["x", "y", "ok"]), _client=client)
