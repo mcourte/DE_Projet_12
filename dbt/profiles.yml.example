@@ -10,3 +10,10 @@ sport_data_solution:
       extensions:
         - parquet
         - postgres   # utilisé par export_gold_to_postgres pour écrire la couche gold
+    # Utilisé par le workflow GitHub Actions (.github/workflows/dbt-ci.yml) :
+    # fichier DuckDB jetable, alimenté par tests/fixtures/bronze, sans Postgres.
+    ci:
+      type: duckdb
+      path: "../data/warehouse_ci.duckdb"
+      extensions:
+        - parquet

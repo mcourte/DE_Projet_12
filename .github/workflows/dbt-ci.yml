@@ -1,13 +1,10 @@
-# AXE D'AMÉLIORATION (hors périmètre du POC) : valide chaque push en
-# exécutant `dbt build` sur DuckDB — aucun service externe requis (pas de
-# Postgres/NATS à monter en CI), donc rapide et sans dépendance réseau.
+# Valide chaque modification des modèles dbt en exécutant `dbt build` sur
+# DuckDB — aucun service externe requis (pas de Postgres/NATS à monter en
+# CI), donc rapide et sans dépendance réseau.
 #
-# TODO avant que ce workflow soit vraiment utilisable :
-# 1. Fournir un petit jeu de données Parquet de test dans data/bronze/
-#    (quelques lignes anonymisées, committées dans un dossier tests/fixtures/)
-#    puisque data/bronze/ est ignoré par .gitignore pour les vraies données RH.
-# 2. Adapter dbt/profiles.yml.example -> profiles.yml pour pointer sur un
-#    fichier DuckDB temporaire (ex. via une variable d'environnement CI).
+# Les données réelles (RH) ne sont pas versionnées : le workflow s'appuie
+# sur le petit jeu de test anonymisé de tests/fixtures/bronze/, copié dans
+# data/bronze/, et sur le target "ci" de dbt/profiles.yml.example.
 
 name: dbt-ci
 
@@ -15,9 +12,11 @@ on:
   push:
     paths:
       - "dbt/**"
+      - "tests/fixtures/**"
   pull_request:
     paths:
       - "dbt/**"
+      - "tests/fixtures/**"
 
 jobs:
   dbt-build:
@@ -32,6 +31,12 @@ jobs:
       - name: Installer les dépendances dbt
         run: pip install dbt-core dbt-duckdb
 
+      - name: Préparer les données de test et le profil dbt
+        run: |
+          mkdir -p data
+          cp -r tests/fixtures/bronze data/bronze
+          cp dbt/profiles.yml.example dbt/profiles.yml
+
       - name: dbt deps
         working-directory: dbt
         run: dbt deps
@@ -39,5 +44,3 @@ jobs:
       - name: dbt build (sur le jeu de données de test)
         working-directory: dbt
         run: dbt build --target ci
-        # TODO : ajouter un target "ci" dans profiles.yml pointant vers
-        # un fichier DuckDB jetable alimenté par les fixtures du point 1.

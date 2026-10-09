@@ -3,6 +3,7 @@ data/raw/
 data/generated/
 data/bronze/
 data/warehouse.duckdb
+data/warehouse_ci.duckdb
 
 # dbt
 dbt/target/
