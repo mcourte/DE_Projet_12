@@ -147,3 +147,30 @@ def test_emit_live_activity_inserts_and_publishes(monkeypatch):
     assert activity["id_salarie"] == 99
     assert len(published) == 1
     assert published[0]["id"] == activity["id"]
+
+
+def test_declared_sport_found_and_missing(monkeypatch):
+    import src.extract as extract
+
+    sports = pd.DataFrame({"id_salarie": [1, 2], "pratique_sport": ["Natation", float("nan")]})
+    monkeypatch.setattr(extract, "extract_sport_referential", lambda: sports)
+
+    assert generator._declared_sport(1) == "Natation"
+    with pytest.raises(SystemExit):
+        generator._declared_sport(2)  # sport non renseigné
+    with pytest.raises(SystemExit):
+        generator._declared_sport(99)  # salarié inconnu
+
+
+def test_main_live_uses_declared_sport_by_default(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(generator, "_declared_sport", lambda employee_id: "Runing")
+    monkeypatch.setattr(
+        generator, "emit_live_activity",
+        lambda employee_id, sport: calls.append((employee_id, sport)) or {"id": 7, "distance_m": 5200},
+    )
+
+    generator.main(["live", "--salarie", "42"])
+
+    assert calls == [(42, "Runing")]
+    assert "Activité 7 ajoutée" in capsys.readouterr().out

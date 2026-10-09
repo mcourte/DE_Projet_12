@@ -211,3 +211,34 @@ def emit_live_activity(employee_id: int, sport_type: str, rng: Optional[random.R
 
     publish_activity_event(activity)
     return activity
+
+
+def _declared_sport(employee_id: int) -> str:
+    """Sport déclaré par le salarié dans le fichier Données Sportive."""
+    from src.extract import extract_sport_referential
+
+    sports = extract_sport_referential()
+    row = sports[sports["id_salarie"] == employee_id]
+    if row.empty or pd.isna(row.iloc[0]["pratique_sport"]):
+        raise SystemExit(f"Aucun sport déclaré pour le salarié {employee_id} : préciser --sport.")
+    return row.iloc[0]["pratique_sport"]
+
+
+def main(argv=None) -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Génération d'activités pour la démonstration")
+    sub = parser.add_subparsers(dest="command", required=True)
+    live = sub.add_parser("live", help="ajoute une activité maintenant (base + NATS -> Slack)")
+    live.add_argument("--salarie", type=int, required=True, help="ID du salarié")
+    live.add_argument("--sport", help="sport de l'activité (par défaut : le sport déclaré du salarié)")
+    args = parser.parse_args(argv)
+
+    sport = args.sport or _declared_sport(args.salarie)
+    activity = emit_live_activity(args.salarie, sport)
+    distance = f"{activity['distance_m'] / 1000:.1f} km" if activity.get("distance_m") else "sans distance"
+    print(f"Activité {activity['id']} ajoutée : salarié {args.salarie}, {sport}, {distance}.")
+
+
+if __name__ == "__main__":
+    main()
