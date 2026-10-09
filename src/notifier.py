@@ -75,7 +75,7 @@ def format_slack_message(activity: dict, employee: dict) -> str:
             )
     else:
         nom_activite = style.get("nom_activite", sport.lower())
-        base = f"Bravo {prenom} {nom} ! {nom_activite.capitalize()} terminée ({duree_min:.0f} min) !"
+        base = f"Bravo {prenom} {nom} ! {nom_activite.capitalize()} : {duree_min:.0f} min d'effort !"
 
     message = f"{base} {emoji}"
     commentaire = activity.get("commentaire")
