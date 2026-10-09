@@ -122,15 +122,14 @@ def check_volumetry_drift(table: str, expected_range: Tuple[int, int]) -> bool:
     return low <= count <= high
 
 
-# AXE D'AMÉLIORATION (hors périmètre initial du POC) :
-# notify_geocoding_anomalies : après chaque run dbt, interroger silver_employees_validated
-# où anomalie_distance = true, et si des lignes existent, envoyer un email récapitulatif à
-# Juliette (id salarié, mode déclaré, distance calculée, seuil) — PAS sur Slack (channel
-# public/motivationnel, inadapté à une question RH nominative). Formule A ne rejette jamais
-# une déclaration automatiquement, elle la "remonte" : cette fonction est le mécanisme concret
-# qui manquait pour que "remontée" veuille dire quelque chose de plus qu'une colonne en base.
+# Piste d'évolution, volontairement non implémentée dans le POC :
+# notify_geocoding_anomalies enverrait un email récapitulatif à Juliette (id salarié,
+# mode déclaré, distance calculée, seuil) quand gold_kpi.anomalie_distance est vrai pour
+# au moins un salarié — par email et non sur Slack (channel public, inadapté à une question
+# RH nominative). En attendant, les anomalies sont visibles dans le dashboard Grafana et
+# dans la colonne anomalie_distance de gold_kpi (Power BI).
 def notify_geocoding_anomalies(anomalies_df):
-    raise NotImplementedError
+    raise NotImplementedError("Piste d'évolution : envoi d'un email à la RH (hors périmètre du POC)")
 
 
 def send_alert(message: str, severity: str = "warning") -> None:
