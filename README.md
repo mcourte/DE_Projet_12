@@ -40,8 +40,8 @@ src/
   orchestration/
     dagster_definitions.py    M7 - Orchestration Dagster (assets, planning quotidien 6h)
   monitoring.py                M8 - Métriques d'exécution -> PostgreSQL (lu par Grafana), alertes Slack
-  security.py                  M9 - Chiffrement/accès/audit (PostgreSQL natif)
-tests/                        61 tests unitaires (mirroring de src/) + jeu de test tests/fixtures/bronze
+  security.py                  M9 - Chiffrement pgcrypto, contrôle d'accès, journal d'audit (appelés par le pipeline)
+tests/                        65 tests unitaires (mirroring de src/) + jeu de test tests/fixtures/bronze
 POC_Avantages_Sportifs.pbix      Rapport Power BI (connecté à gold.gold_kpi)
 grafana/
   provisioning/              Source de données PostgreSQL + chargeur de dashboards (auto)
@@ -67,7 +67,7 @@ python -m src.pipeline run                # extraction + distances Google Maps +
 python -m src.pipeline replay --taux-prime 0.10   # rejoue l'historique avec un nouveau taux, puis exporte
 python -m src.notifier                    # processus long : écoute NATS et publie sur Slack
 python -m src.generator live --salarie 18918      # insère une activité (démo) : base + NATS -> Slack
-pytest                                    # 61 tests (attention : remplace les données chargées par un jeu de test)
+pytest                                    # 65 tests (attention : remplace les données chargées par un jeu de test)
 ```
 
 `python -m src.pipeline run` utilise toujours le taux officiel de `config/config.yaml` ; `replay --taux-prime`
@@ -83,6 +83,15 @@ tous les jours à 6h.
   (`/invite @nom-du-bot`).
 - **Clés** : `.env` (non versionné) contient `SLACK_BOT_TOKEN`, `GOOGLE_MAPS_API_KEY`, `POSTGRES_*` et
   `PGCRYPTO_PASSPHRASE`.
+
+## Sécurité des données RH
+
+- Le pipeline vérifie d'abord que son rôle PostgreSQL a le droit de lire les données (`check_access`).
+- Salaire et adresse du référentiel `employees` sont **chiffrés** en base (pgcrypto, clé `PGCRYPTO_PASSPHRASE` dans `.env`) ;
+  la liste des colonnes est dans `security.sensitive_fields` (`config/config.yaml`).
+- Chaque lecture RH, lecture d'activités et export est tracé dans `monitoring.audit_log`.
+- Limite assumée : les extraits Parquet et DuckDB utilisés par dbt contiennent le salaire en clair (nécessaire au calcul
+  de la prime). Ils restent en local et sont exclus de git.
 
 ## Résultats du POC (données générées, vraies distances Google Maps)
 
