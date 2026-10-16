@@ -57,3 +57,9 @@ warehouse:
 slack:
   channel: "#pratique-sportive"
   alert_channel: "C0BU29G78CV"  # #pipeline_alerte (channel privé : Slack exige l'ID, pas le nom)
+
+# Colonnes du référentiel salarié chiffrées en base (pgcrypto) : données RH sensibles.
+security:
+  sensitive_fields:
+    - salaire_brut
+    - adresse_domicile

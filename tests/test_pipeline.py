@@ -14,6 +14,9 @@ def _patch_happy_path(monkeypatch, calls):
     monkeypatch.setattr(pipeline.load, "export_gold_to_postgres", lambda: calls.append("export_gold") or 5)
     monkeypatch.setattr(pipeline.monitoring, "log_run_metrics", lambda *a, **k: calls.append(("log", a[1])))
     monkeypatch.setattr(pipeline.monitoring, "send_alert", lambda *a, **k: calls.append(("alert", a)))
+    monkeypatch.setattr(pipeline, "_sync_employees", lambda rh: calls.append("sync_employees") or len(rh))
+    monkeypatch.setattr(pipeline.security, "apply_access_control", lambda user, resource: True)
+    monkeypatch.setattr(pipeline.security, "audit_log", lambda action, user, resource: calls.append(("audit", action, resource)))
 
 
 def test_run_pipeline_happy_path_runs_every_step(monkeypatch):
@@ -26,7 +29,52 @@ def test_run_pipeline_happy_path_runs_every_step(monkeypatch):
     assert ("alert",) not in [c[:1] for c in calls if isinstance(c, tuple)]
     logged_steps = [c[1] for c in calls if isinstance(c, tuple) and c[0] == "log"]
     assert "extract_rh" in logged_steps
+    assert "sync_employees" in logged_steps
     assert "export_gold" in logged_steps
+
+
+def test_run_pipeline_audits_reads_and_export(monkeypatch):
+    calls = []
+    _patch_happy_path(monkeypatch, calls)
+
+    pipeline.run_pipeline()
+
+    audits = [(c[1], c[2]) for c in calls if isinstance(c, tuple) and c[0] == "audit"]
+    assert audits == [
+        ("read", "referentiel_rh"),
+        ("write_encrypted", "employees"),
+        ("read", "activities"),
+        ("export", "gold.gold_kpi"),
+    ]
+
+
+def test_run_pipeline_aborts_when_access_is_denied(monkeypatch):
+    calls = []
+    _patch_happy_path(monkeypatch, calls)
+    monkeypatch.setattr(pipeline.security, "apply_access_control", lambda user, resource: False)
+
+    pipeline.run_pipeline()
+
+    assert "dbt_run" not in calls
+    assert "export_gold" not in calls
+    alerts = [c for c in calls if isinstance(c, tuple) and c[0] == "alert"]
+    assert len(alerts) == 1
+    assert "check_access" in alerts[0][1][0]
+
+
+def test_audit_failure_does_not_stop_the_pipeline(monkeypatch, capsys):
+    calls = []
+    _patch_happy_path(monkeypatch, calls)
+
+    def broken_audit(action, user, resource):
+        raise RuntimeError("table audit indisponible")
+
+    monkeypatch.setattr(pipeline.security, "audit_log", broken_audit)
+
+    pipeline.run_pipeline()
+
+    assert "export_gold" in calls
+    assert "table audit indisponible" in capsys.readouterr().err
 
 
 def test_run_pipeline_aborts_when_extraction_fails(monkeypatch):
@@ -79,6 +127,7 @@ def test_replay_pipeline_replays_then_exports(monkeypatch):
     )
     monkeypatch.setattr(pipeline.load, "export_gold_to_postgres", lambda: calls.append("export_gold") or 5)
     monkeypatch.setattr(pipeline.monitoring, "log_run_metrics", lambda *a, **k: None)
+    monkeypatch.setattr(pipeline.security, "audit_log", lambda *a, **k: None)
 
     pipeline.replay_pipeline({"taux_prime": 0.10})
 

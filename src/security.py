@@ -25,9 +25,7 @@ def encrypt_sensitive_fields(df: pd.DataFrame, fields: List[str]) -> pd.DataFram
     """
     from sqlalchemy import text
 
-    passphrase = os.environ.get("PGCRYPTO_PASSPHRASE")
-    if not passphrase:
-        raise RuntimeError("PGCRYPTO_PASSPHRASE manquant dans l'environnement (.env)")
+    passphrase = _passphrase()
 
     engine = _postgres_engine()
     result = df.copy()
@@ -47,6 +45,53 @@ def encrypt_sensitive_fields(df: pd.DataFrame, fields: List[str]) -> pd.DataFram
             ]
 
     return result
+
+
+def _passphrase() -> str:
+    passphrase = os.environ.get("PGCRYPTO_PASSPHRASE")
+    if not passphrase:
+        raise RuntimeError("PGCRYPTO_PASSPHRASE manquant dans l'environnement (.env)")
+    return passphrase
+
+
+def sensitive_fields() -> List[str]:
+    """Colonnes à chiffrer, définies dans config/config.yaml (security.sensitive_fields)."""
+    return list(get_param("security.sensitive_fields", default=["salaire_brut", "adresse_domicile"]))
+
+
+def ensure_encrypted_columns(table: str, fields: List[str]) -> None:
+    """Convertit les colonnes sensibles d'une table PostgreSQL en `bytea`
+    chiffré (pgcrypto), en rechiffrant les valeurs déjà présentes. Sans
+    effet si une colonne est déjà chiffrée : peut être appelé à chaque run.
+
+    La clé est transmise par `set_config` (paramètre lié) et non écrite
+    dans le SQL, pour ne pas apparaître dans les journaux de PostgreSQL.
+    """
+    from sqlalchemy import text
+
+    passphrase = _passphrase()
+    engine = _postgres_engine()
+    schema = get_param("postgres.schema_operational", default="public")
+
+    with engine.begin() as conn:
+        conn.execute(text("select set_config('app.pgcrypto_key', :p, true)"), {"p": passphrase})
+        for field in fields:
+            data_type = conn.execute(
+                text(
+                    "select data_type from information_schema.columns "
+                    "where table_schema = :s and table_name = :t and column_name = :c"
+                ),
+                {"s": schema, "t": table, "c": field},
+            ).scalar()
+            if data_type is None or data_type == "bytea":
+                continue
+            conn.execute(
+                text(
+                    f'alter table {qualified_table(schema, table)} '
+                    f'alter column "{field}" type bytea '
+                    f"using pgp_sym_encrypt(\"{field}\"::text, current_setting('app.pgcrypto_key'))"
+                )
+            )
 
 
 def apply_access_control(user: str, resource: str) -> bool:
