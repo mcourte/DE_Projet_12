@@ -41,7 +41,7 @@ src/
     dagster_definitions.py    M7 - Orchestration Dagster (assets, planning quotidien 6h)
   monitoring.py                M8 - Métriques d'exécution -> PostgreSQL (lu par Grafana), alertes Slack
   security.py                  M9 - Chiffrement/accès/audit (PostgreSQL natif)
-tests/                        65 tests unitaires (mirroring de src/) + jeu de test tests/fixtures/bronze
+tests/                        61 tests unitaires (mirroring de src/) + jeu de test tests/fixtures/bronze
 POC_Avantages_Sportifs.pbix      Rapport Power BI (connecté à gold.gold_kpi)
 grafana/
   provisioning/              Source de données PostgreSQL + chargeur de dashboards (auto)
@@ -67,7 +67,7 @@ python -m src.pipeline run                # extraction + distances Google Maps +
 python -m src.pipeline replay --taux-prime 0.10   # rejoue l'historique avec un nouveau taux, puis exporte
 python -m src.notifier                    # processus long : écoute NATS et publie sur Slack
 python -m src.generator live --salarie 18918      # insère une activité (démo) : base + NATS -> Slack
-pytest                                    # 65 tests (attention : remplace les données chargées par un jeu de test)
+pytest                                    # 61 tests (attention : remplace les données chargées par un jeu de test)
 ```
 
 `python -m src.pipeline run` utilise toujours le taux officiel de `config/config.yaml` ; `replay --taux-prime`
@@ -91,7 +91,7 @@ journées bien-être (415 jours) · 20/20 tests dbt · 0 anomalie de distance.
 
 ## Pistes d'évolution (hors périmètre du POC)
 
-- Email à la RH en cas d'anomalie de distance (`monitoring.notify_geocoding_anomalies`, non implémentée).
+- Email à la RH en cas d'anomalie de distance (non implémenté).
 - Vérification de la régularité des trajets avec l'historique Strava réel (formule A).
 - Politique de nouvelle tentative automatique en cas d'échec de l'API Google Maps.
 

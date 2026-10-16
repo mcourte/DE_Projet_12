@@ -57,7 +57,3 @@ warehouse:
 slack:
   channel: "#pratique-sportive"
   alert_channel: "C0BU29G78CV"  # #pipeline_alerte (channel privé : Slack exige l'ID, pas le nom)
-
-monitoring:
-  volumetry_tolerance_pct: 20
-  freshness_max_delay_hours: 24

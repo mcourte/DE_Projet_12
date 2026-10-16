@@ -1,23 +1,14 @@
 """M8 - Monitoring.
 
-Surveille la volumétrie et la fraîcheur des données, alerte en cas
-d'anomalie d'exécution du pipeline. Les métriques sont écrites dans le
-schéma `monitoring` de PostgreSQL ; Grafana s'y connecte directement en
-lecture (pas besoin de Prometheus : ce sont des métriques pipeline, pas
-des métriques d'infrastructure).
+Journalise chaque étape du pipeline (volume, durée, statut) et alerte
+en cas d'échec. Les métriques sont écrites dans le schéma `monitoring`
+de PostgreSQL ; Grafana s'y connecte directement en lecture (pas besoin
+de Prometheus : ce sont des métriques pipeline, pas des métriques
+d'infrastructure).
 """
-
-from datetime import datetime, timedelta, timezone
-from typing import Tuple
 
 from src.config import get_param
 from src.extract import _postgres_engine, qualified_table
-
-# Colonnes de date candidates, dans l'ordre où on les cherche, pour
-# check_data_freshness : les différentes tables du projet n'ont pas
-# toutes le même nom de colonne temporelle (created_at côté monitoring,
-# calcule_le côté gold_kpi, date_debut côté activités...).
-_FRESHNESS_CANDIDATE_COLUMNS = ["created_at", "calcule_le", "date_debut"]
 
 
 def _pipeline_runs_table():
@@ -71,65 +62,6 @@ def log_run_metrics(
             query,
             {"run_id": run_id, "step": step, "row_count": row_count, "duration": duration, "status": status},
         )
-
-
-def check_data_freshness(table: str) -> bool:
-    """Vérifie que les données les plus récentes ne dépassent pas le
-    délai attendu (config.yaml -> monitoring.freshness_max_delay_hours).
-
-    Retourne True si les données sont fraîches, False sinon (ou si
-    aucune colonne de date connue n'a été trouvée sur `table`).
-    """
-    from sqlalchemy import text
-
-    engine = _postgres_engine()
-    max_delay_hours = get_param("monitoring.freshness_max_delay_hours", default=24)
-
-    last_ts = None
-    for col in _FRESHNESS_CANDIDATE_COLUMNS:
-        try:
-            with engine.connect() as conn:
-                last_ts = conn.execute(text(f"select max({col}) from {table}")).scalar_one()
-            if last_ts is not None:
-                break
-        except Exception:
-            continue
-
-    if last_ts is None:
-        return False
-
-    if isinstance(last_ts, str):
-        last_ts = datetime.fromisoformat(last_ts)
-    if last_ts.tzinfo is not None:
-        last_ts = last_ts.astimezone(timezone.utc).replace(tzinfo=None)
-
-    delay = datetime.utcnow() - last_ts
-    return delay <= timedelta(hours=max_delay_hours)
-
-
-def check_volumetry_drift(table: str, expected_range: Tuple[int, int]) -> bool:
-    """Détecte une variation anormale du volume de lignes traitées
-    d'une exécution à l'autre. Retourne True si le volume actuel est
-    dans `expected_range` (min, max inclus), False sinon.
-    """
-    from sqlalchemy import text
-
-    engine = _postgres_engine()
-    with engine.connect() as conn:
-        count = conn.execute(text(f"select count(*) from {table}")).scalar_one()
-
-    low, high = expected_range
-    return low <= count <= high
-
-
-# Piste d'évolution, volontairement non implémentée dans le POC :
-# notify_geocoding_anomalies enverrait un email récapitulatif à Juliette (id salarié,
-# mode déclaré, distance calculée, seuil) quand gold_kpi.anomalie_distance est vrai pour
-# au moins un salarié — par email et non sur Slack (channel public, inadapté à une question
-# RH nominative). En attendant, les anomalies sont visibles dans le dashboard Grafana et
-# dans la colonne anomalie_distance de gold_kpi (Power BI).
-def notify_geocoding_anomalies(anomalies_df):
-    raise NotImplementedError("Piste d'évolution : envoi d'un email à la RH (hors périmètre du POC)")
 
 
 def send_alert(message: str, severity: str = "warning") -> None:
