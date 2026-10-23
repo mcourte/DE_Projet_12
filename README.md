@@ -41,7 +41,7 @@ src/
     dagster_definitions.py    M7 - Orchestration Dagster (assets, planning quotidien 6h)
   monitoring.py                M8 - Métriques d'exécution -> PostgreSQL (lu par Grafana), alertes Slack
   security.py                  M9 - Chiffrement pgcrypto, contrôle d'accès, journal d'audit (appelés par le pipeline)
-tests/                        65 tests unitaires (mirroring de src/) + jeu de test tests/fixtures/bronze
+tests/                        68 tests unitaires (mirroring de src/) + jeu de test tests/fixtures/bronze
 POC_Avantages_Sportifs.pbix      Rapport Power BI (connecté à gold.gold_kpi)
 grafana/
   provisioning/              Source de données PostgreSQL + chargeur de dashboards (auto)
@@ -63,16 +63,17 @@ cd dbt && dbt deps && dbt build
 
 ```bash
 cp .env.example .env                      # puis renseigner SLACK_BOT_TOKEN et GOOGLE_MAPS_API_KEY
+python -m src.generator seed               # (1re installation) génère 12 mois d'activités ; --reset pour remplacer
 python -m src.pipeline run                # extraction + distances Google Maps + dbt + tests + export gold
 python -m src.pipeline replay --taux-prime 0.10   # rejoue l'historique avec un nouveau taux, puis exporte
 python -m src.notifier                    # processus long : écoute NATS et publie sur Slack
 python -m src.generator live --salarie 18918      # insère une activité (démo) : base + NATS -> Slack
-pytest                                    # 65 tests (attention : remplace les données chargées par un jeu de test)
+pytest                                    # 68 tests (attention : remplace les données chargées par un jeu de test)
 ```
 
 `python -m src.pipeline run` utilise toujours le taux officiel de `config/config.yaml` ; `replay --taux-prime`
 ne sert qu'à simuler un autre taux. Un orchestrateur Dagster est aussi fourni (`src/orchestration/`), planifié
-tous les jours à 6h.
+tous les jours à 6h ; il enchaîne les mêmes étapes, y compris le contrôle d'accès, le chiffrement et l'audit.
 
 - **Power BI** : ouvrir `POC_Avantages_Sportifs.pbix` (ou se connecter à PostgreSQL `localhost:5432`, base `sportdata`,
   table `gold.gold_kpi`), puis *Actualiser*.
