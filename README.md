@@ -5,8 +5,8 @@ système de récompenses sportives pour les salariés (prime sportive,
 journées bien-être), avec calcul de l'impact financier et restitution
 Power BI.
 
-Stack 100% open source (hors Power BI, imposé par la mission) : voir
-la justification des choix dans [`docs/RAPPORT.md`](docs/RAPPORT.md).
+Stack open source (hors Power BI, Google Maps et Slack, imposés par la mission) : PostgreSQL, NATS,
+DuckDB, dbt, Dagster, Grafana. La justification des choix est dans le rapport de synthèse remis avec le projet.
 
 ## Structure du projet
 
@@ -16,7 +16,7 @@ config/
 docker-compose.yml          Infra locale : PostgreSQL, NATS, Grafana (open source)
 .github/workflows/          CI : dbt build sur jeu de données de test à chaque modification de dbt/
 data/
-  raw/                      Fichiers sources (Données RH.xlsx, Données Sportive.xlsx)
+  raw/                      Fichiers sources (Donnees_RH.xlsx, Donnees_Sportive.xlsx), non versionnés
   bronze/                   Extraits Parquet lus par dbt
   warehouse.duckdb          Entrepôt analytique DuckDB (silver/gold, généré par dbt)
 dbt/
@@ -56,8 +56,11 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 cp dbt/profiles.yml.example dbt/profiles.yml
-cd dbt && dbt deps && dbt build
+cd dbt && dbt deps && cd ..
 ```
+
+Placer ensuite `Donnees_RH.xlsx` et `Donnees_Sportive.xlsx` dans `data/raw/`, puis suivre la section Utilisation
+(le premier `pipeline run` produit les extraits bronze dont dbt a besoin).
 
 ## Utilisation
 
@@ -71,8 +74,10 @@ python -m src.generator live --salarie 18918      # insère une activité (démo
 pytest                                    # 68 tests (attention : remplace les données chargées par un jeu de test)
 ```
 
-`python -m src.pipeline run` utilise toujours le taux officiel de `config/config.yaml` ; `replay --taux-prime`
-ne sert qu'à simuler un autre taux. Un orchestrateur Dagster est aussi fourni (`src/orchestration/`), planifié
+`pipeline run` enchaîne : `check_access` → `extract_rh` → `sync_employees` → `extract_sport` → `extract_activities` →
+`dbt_run` → `dbt_test` → `export_gold`, et s'arrête à la première étape en échec. Il utilise le taux défini dans
+`dbt/dbt_project.yml` (`vars`), qui doit rester identique à `config/config.yaml` ; `replay --taux-prime` ne sert
+qu'à simuler un autre taux. Un orchestrateur Dagster est aussi fourni (`src/orchestration/`), planifié
 tous les jours à 6h ; il enchaîne les mêmes étapes, y compris le contrôle d'accès, le chiffrement et l'audit.
 
 - **Power BI** : ouvrir `POC_Avantages_Sportifs.pbix` (ou se connecter à PostgreSQL `localhost:5432`, base `sportdata`,
@@ -111,3 +116,4 @@ Tous les seuils métier (taux de prime, nombre de jours bien-être,
 seuil d'activités, distances maximales) sont définis dans
 `config/config.yaml` **et** dans `dbt/dbt_project.yml` (vars) — aucun
 ne doit être codé en dur dans `src/` ou dans les modèles SQL.
+Le calcul dbt lit les `vars` : pour changer un seuil de façon durable, modifier les deux fichiers.
