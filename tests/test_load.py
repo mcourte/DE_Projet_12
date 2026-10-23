@@ -65,3 +65,14 @@ def test_export_gold_to_postgres_writes_to_sqlite(monkeypatch, dbt_bronze_fixtur
     with engine.connect() as conn:
         n = conn.execute(text("select count(*) from gold_kpi")).scalar_one()
     assert n == count
+
+
+def test_prepare_employee_rows_keeps_table_columns_and_nulls_missing_values():
+    rh = pd.DataFrame(
+        [{c: 1 for c in load._EMPLOYEE_TABLE_COLUMNS} | {"distance_domicile_bureau_km": 4.2, "nombre_jours_cp": float("nan")}]
+    )
+
+    rows = load._prepare_employee_rows(rh)
+
+    assert list(rows.columns) == load._EMPLOYEE_TABLE_COLUMNS
+    assert rows.loc[0, "nombre_jours_cp"] is None

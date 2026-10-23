@@ -7,12 +7,22 @@ sources en Parquet (bronze), et exporter la couche gold finale vers
 PostgreSQL pour que Power BI s'y connecte nativement.
 """
 
+from typing import Optional
+
 import duckdb
 import pandas as pd
 
+from src import security
 from src.config import get_param
 from src.extract import _postgres_engine, qualified_table
 from src.transform import _duckdb_path
+
+# Colonnes de la table `employees` (le référentiel RH en contient d'autres,
+# comme la distance domicile-bureau, qui ne vont pas dans cette table).
+_EMPLOYEE_TABLE_COLUMNS = [
+    "id_salarie", "nom", "prenom", "date_naissance", "bu", "date_embauche",
+    "salaire_brut", "type_contrat", "nombre_jours_cp", "adresse_domicile", "moyen_deplacement",
+]
 
 
 def ensure_employees_table() -> None:
@@ -74,25 +84,50 @@ def upsert_employee_referential(df: pd.DataFrame) -> int:
     return len(df)
 
 
-def export_gold_to_postgres(table: str = "gold_kpi") -> int:
-    """Lit une table gold depuis DuckDB et l'écrit dans le schéma
-    `gold` de PostgreSQL — seul point que Power BI a besoin de connaître.
-    Retourne le nombre de lignes exportées.
-    """
-    from sqlalchemy import text
+def _prepare_employee_rows(rh: pd.DataFrame) -> pd.DataFrame:
+    """Ne garde que les colonnes de la table `employees` et remplace les
+    valeurs manquantes (NaN, NaT) par `None`, que PostgreSQL accepte."""
+    rows = rh[_EMPLOYEE_TABLE_COLUMNS].astype(object)
+    return rows.where(rows.notna(), None)
 
+
+def sync_employee_referential(rh: pd.DataFrame) -> int:
+    """Met à jour le référentiel salarié de PostgreSQL (lu par le notifier
+    Slack) avec salaire et adresse chiffrés. Retourne le nombre de lignes.
+    """
+    rows = _prepare_employee_rows(rh)
+    ensure_employees_table()
+    fields = security.sensitive_fields()
+    security.ensure_encrypted_columns("employees", fields)
+    return upsert_employee_referential(security.encrypt_sensitive_fields(rows, fields))
+
+
+def _read_duckdb_table(table: str) -> pd.DataFrame:
+    """Lit une table de l'entrepôt DuckDB (ouvert en lecture seule)."""
     con = duckdb.connect(str(_duckdb_path()), read_only=True)
     try:
-        df = con.sql(f"select * from {table}").df()
+        return con.sql(f"select * from {table}").df()
     finally:
         con.close()
 
-    engine = _postgres_engine()
-    schema = get_param("postgres.schema_gold", default="gold")
+
+def _ensure_schema(engine, schema: Optional[str]) -> None:
+    """Crée le schéma PostgreSQL s'il n'existe pas (sans effet si `schema` est vide)."""
+    from sqlalchemy import text
 
     if schema:
         with engine.begin() as conn:
             conn.execute(text(f'create schema if not exists "{schema}"'))
 
+
+def export_gold_to_postgres(table: str = "gold_kpi") -> int:
+    """Copie une table gold de DuckDB vers le schéma `gold` de PostgreSQL
+    — seul point que Power BI a besoin de connaître. Retourne le nombre
+    de lignes exportées.
+    """
+    df = _read_duckdb_table(table)
+    engine = _postgres_engine()
+    schema = get_param("postgres.schema_gold", default="gold")
+    _ensure_schema(engine, schema)
     df.to_sql(table, engine, schema=schema or None, if_exists="replace", index=False)
     return len(df)
