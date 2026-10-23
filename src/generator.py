@@ -87,6 +87,41 @@ def generate_activity_record(
     }
 
 
+def _has_declared_sport(sport) -> bool:
+    """Vrai si le salarié a déclaré un sport (pas None, NaN ni chaîne vide)."""
+    if sport is None or (isinstance(sport, float) and pd.isna(sport)):
+        return False
+    return bool(str(sport).strip())
+
+
+def _month_windows(start: datetime, end: datetime):
+    """Découpe la période en mois : renvoie (début du mois, fin du mois)
+    pour chaque mois touché, la dernière fin étant bornée par `end`.
+    """
+    current_month_start = datetime(start.year, start.month, 1)
+    while current_month_start < end:
+        next_month = (current_month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
+        yield current_month_start, min(next_month, end)
+        current_month_start = next_month
+
+
+def _iter_activity_starts(
+    rng: random.Random, month_start: datetime, month_end: datetime, activities_per_month: float
+):
+    """Tire le nombre d'activités du mois, puis produit la date de début de
+    chacune (jour, heure entre 6h et 21h, minutes). Générateur paresseux :
+    les tirages restent intercalés avec ceux de generate_activity_record,
+    ce qui garde un historique identique pour un même salarié.
+    """
+    count = int(round(rng.uniform(0, activities_per_month * 2)))
+    span_days = max((month_end - month_start).days, 1)
+    for _ in range(count):
+        day_offset = rng.randint(0, span_days - 1)
+        hour = rng.randint(6, 21)
+        minute = rng.choice([0, 15, 30, 45])
+        yield month_start + timedelta(days=day_offset, hours=hour, minutes=minute)
+
+
 def generate_activity_history(
     employee_id: int,
     sport: Optional[str],
@@ -97,11 +132,10 @@ def generate_activity_history(
     """Produit un historique réaliste d'activités pour un salarié sur une
     période donnée, cohérent avec son sport déclaré dans le fichier RH.
 
-    Un salarié sans sport déclaré (pd.isna(sport) ou chaîne vide) n'a
-    aucun historique généré — on ne peut pas inventer une pratique
-    qu'il n'a jamais déclarée.
+    Un salarié sans sport déclaré n'a aucun historique généré — on ne peut
+    pas inventer une pratique qu'il n'a jamais déclarée.
     """
-    if sport is None or (isinstance(sport, float) and pd.isna(sport)) or not str(sport).strip():
+    if not _has_declared_sport(sport):
         return pd.DataFrame(columns=_ACTIVITY_COLUMNS)
 
     rng = rng or random.Random(employee_id)
@@ -112,28 +146,15 @@ def generate_activity_history(
     activities_per_month = rng.uniform(0.5, 4.5)
 
     records = []
-    current_month_start = datetime(start.year, start.month, 1)
-    while current_month_start < end:
-        next_month = (current_month_start.replace(day=28) + timedelta(days=4)).replace(day=1)
-        month_end = min(next_month, end)
-
-        nb_activities_this_month = int(round(rng.uniform(0, activities_per_month * 2)))
-        for _ in range(nb_activities_this_month):
-            span_days = max((month_end - current_month_start).days, 1)
-            day_offset = rng.randint(0, span_days - 1)
-            hour = rng.randint(6, 21)
-            minute = rng.choice([0, 15, 30, 45])
-            activity_date = current_month_start + timedelta(days=day_offset, hours=hour, minutes=minute)
+    for month_start, month_end in _month_windows(start, end):
+        for activity_date in _iter_activity_starts(rng, month_start, month_end, activities_per_month):
             if start <= activity_date <= end:
                 records.append(generate_activity_record(employee_id, sport, activity_date, rng=rng))
-
-        current_month_start = next_month
 
     if not records:
         return pd.DataFrame(columns=_ACTIVITY_COLUMNS)
 
-    records = _drop_overlapping_records(records)
-    return pd.DataFrame(records, columns=_ACTIVITY_COLUMNS)
+    return pd.DataFrame(_drop_overlapping_records(records), columns=_ACTIVITY_COLUMNS)
 
 
 def _drop_overlapping_records(records: list) -> list:
@@ -192,15 +213,11 @@ def ensure_activities_table() -> None:
         conn.execute(text(ddl))
 
 
-def seed_history(reset: bool = False, now: Optional[datetime] = None) -> int:
-    """Chargement initial : génère 12 mois d'activités pour chaque salarié
-    ayant déclaré un sport (fichier Données Sportive) et les insère dans
-    PostgreSQL. Refuse d'écraser des activités existantes sans `reset`.
-    Retourne le nombre d'activités insérées.
+def _prepare_activities_table(reset: bool) -> None:
+    """Garde-fou avant le chargement initial : crée la table, refuse
+    d'écraser des activités existantes, et les vide si `reset` est demandé.
     """
     from sqlalchemy import text
-
-    from src.extract import extract_sport_referential
 
     ensure_activities_table()
     engine = _postgres_engine()
@@ -217,8 +234,12 @@ def seed_history(reset: bool = False, now: Optional[datetime] = None) -> int:
         if reset:
             conn.execute(text(f"delete from {table}"))
 
-    end = now or datetime.now()
-    start = end - timedelta(days=365)
+
+def _generate_all_histories(start: datetime, end: datetime) -> pd.DataFrame:
+    """Génère l'historique de chaque salarié ayant déclaré un sport
+    (fichier Données Sportive), concaténé en un seul tableau."""
+    from src.extract import extract_sport_referential
+
     sports = extract_sport_referential()
     frames = [
         generate_activity_history(int(row["id_salarie"]), row["pratique_sport"], start, end)
@@ -226,8 +247,19 @@ def seed_history(reset: bool = False, now: Optional[datetime] = None) -> int:
     ]
     frames = [f for f in frames if not f.empty]
     if not frames:
-        return 0
-    return seed_operational_db(pd.concat(frames, ignore_index=True))
+        return pd.DataFrame(columns=_ACTIVITY_COLUMNS)
+    return pd.concat(frames, ignore_index=True)
+
+
+def seed_history(reset: bool = False, now: Optional[datetime] = None) -> int:
+    """Chargement initial : 12 mois d'activités pour chaque salarié ayant
+    déclaré un sport, insérés dans PostgreSQL. Retourne le nombre
+    d'activités insérées.
+    """
+    _prepare_activities_table(reset)
+    end = now or datetime.now()
+    start = end - timedelta(days=365)
+    return seed_operational_db(_generate_all_histories(start, end))
 
 
 async def _publish_async(subject: str, payload: bytes, nats_url: str) -> None:
@@ -253,14 +285,10 @@ def publish_activity_event(activity: dict) -> None:
     asyncio.run(_publish_async(subject, payload, nats_url))
 
 
-def emit_live_activity(employee_id: int, sport_type: str, rng: Optional[random.Random] = None) -> dict:
-    """Simule l'arrivée d'une activité "en direct" : écrit la ligne en
-    base ET publie l'événement (cf. publish_activity_event) pour tester
-    la chaîne temps réel Slack sans attendre l'intégration Strava.
-    """
+def _insert_activity(activity: dict) -> int:
+    """Écrit une activité dans la table `activities` et renvoie l'`id`
+    attribué par PostgreSQL."""
     from sqlalchemy import text
-
-    activity = generate_activity_record(employee_id, sport_type, datetime.now(), rng=rng)
 
     engine = _postgres_engine()
     schema = get_param("postgres.schema_operational", default="public")
@@ -269,9 +297,17 @@ def emit_live_activity(employee_id: int, sport_type: str, rng: Optional[random.R
     placeholders = ", ".join(f":{k}" for k in activity.keys())
     query = text(f"insert into {table} ({columns}) values ({placeholders}) returning id")
     with engine.begin() as conn:
-        result = conn.execute(query, activity)
-        activity["id"] = result.scalar_one()
+        return conn.execute(query, activity).scalar_one()
 
+
+def emit_live_activity(employee_id: int, sport_type: str, rng: Optional[random.Random] = None) -> dict:
+    """Simule l'arrivée d'une activité "en direct" : écrit la ligne en
+    base PUIS publie l'événement, pour tester la chaîne temps réel Slack
+    sans attendre l'intégration Strava. La publication vient après
+    l'écriture : on n'annonce jamais une activité qui n'existe pas.
+    """
+    activity = generate_activity_record(employee_id, sport_type, datetime.now(), rng=rng)
+    activity["id"] = _insert_activity(activity)
     publish_activity_event(activity)
     return activity
 

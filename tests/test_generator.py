@@ -216,3 +216,26 @@ def test_main_seed_prints_count(monkeypatch, capsys):
     generator.main(["seed"])
 
     assert "123 activités insérées" in capsys.readouterr().out
+
+
+def test_has_declared_sport():
+    assert generator._has_declared_sport("Tennis") is True
+    assert generator._has_declared_sport(None) is False
+    assert generator._has_declared_sport(float("nan")) is False
+    assert generator._has_declared_sport("   ") is False
+
+
+def test_month_windows_cover_period_and_cap_last_month():
+    windows = list(generator._month_windows(datetime(2025, 1, 15), datetime(2025, 3, 10)))
+
+    assert [w[0] for w in windows] == [datetime(2025, 1, 1), datetime(2025, 2, 1), datetime(2025, 3, 1)]
+    assert windows[0][1] == datetime(2025, 2, 1)
+    assert windows[-1][1] == datetime(2025, 3, 10)  # bornée par la date de fin
+
+
+def test_iter_activity_starts_stays_within_month_and_hours():
+    rng = random.Random(1)
+    starts = list(generator._iter_activity_starts(rng, datetime(2025, 5, 1), datetime(2025, 6, 1), 4.0))
+
+    assert all(datetime(2025, 5, 1) <= s < datetime(2025, 6, 2) for s in starts)
+    assert all(6 <= s.hour <= 21 + 1 for s in starts)
