@@ -105,7 +105,7 @@ tous les jours à 6h ; il enchaîne les mêmes étapes, y compris le contrôle d
 ## Résultats du POC (données générées, vraies distances Google Maps)
 
 161 salariés · 5 240 activités · 68 éligibles à la prime (172 482,50 € au taux de 5 %) · 83 éligibles aux
-journées bien-être (415 jours) · 20/20 tests dbt · 0 anomalie de distance.
+journées bien-être (415 jours) · 12/12 tests dbt · 0 anomalie de distance.
 
 ## Pistes d'évolution (hors périmètre du POC)
 
