@@ -13,15 +13,27 @@ du planning batch de ces assets.
 
 from dagster import AssetExecutionContext, Definitions, ScheduleDefinition, asset, define_asset_job
 
-from src import extract, load, quality_checks, transform
+from src import extract, load, pipeline, quality_checks, transform
 
 
 @asset
+def access_check() -> None:
+    """Vérifie que le rôle PostgreSQL du pipeline a le droit de lire les
+    données avant toute extraction (cf. src/security.py -> apply_access_control).
+    """
+    pipeline.check_access()
+
+
+@asset(deps=[access_check])
 def bronze_employees(context: AssetExecutionContext) -> None:
-    """Extrait le référentiel RH + géocodage/distance, écrit en Parquet
+    """Extrait le référentiel RH + géocodage/distance, met à jour le
+    référentiel PostgreSQL (salaire et adresse chiffrés), écrit en Parquet
     (cf. src/extract.py -> extract_rh_referential, write_bronze_parquet).
     """
     df = extract.extract_employees_with_distance()
+    pipeline.audit("read", "referentiel_rh")
+    pipeline.sync_employees(df)
+    pipeline.audit("write_encrypted", "employees")
     extract.write_bronze_parquet(df, "employees")
     context.add_output_metadata({"row_count": len(df)})
 
@@ -34,12 +46,13 @@ def bronze_sport_declare(context: AssetExecutionContext) -> None:
     context.add_output_metadata({"row_count": len(df)})
 
 
-@asset
+@asset(deps=[access_check])
 def bronze_activities(context: AssetExecutionContext) -> None:
     """Extrait l'historique d'activités depuis PostgreSQL, écrit en
     Parquet (cf. src/extract.py -> extract_activities_from_postgres).
     """
     df = extract.extract_activities_from_postgres()
+    pipeline.audit("read", "activities")
     extract.write_bronze_parquet(df, "activities")
     context.add_output_metadata({"row_count": len(df)})
 
@@ -66,6 +79,7 @@ def gold_kpi_in_postgres(context: AssetExecutionContext) -> None:
     (cf. src/load.py -> export_gold_to_postgres).
     """
     row_count = load.export_gold_to_postgres()
+    pipeline.audit("export", "gold.gold_kpi")
     context.add_output_metadata({"row_count": row_count})
 
 
@@ -77,6 +91,6 @@ daily_kpi_schedule = ScheduleDefinition(
 )
 
 defs = Definitions(
-    assets=[bronze_employees, bronze_sport_declare, bronze_activities, dbt_gold_kpi, gold_kpi_in_postgres],
+    assets=[access_check, bronze_employees, bronze_sport_declare, bronze_activities, dbt_gold_kpi, gold_kpi_in_postgres],
     schedules=[daily_kpi_schedule],
 )

@@ -48,7 +48,7 @@ def _pipeline_user() -> str:
     return os.environ.get("POSTGRES_USER", "sportdata")
 
 
-def _audit(action: str, resource: str) -> None:
+def audit(action: str, resource: str) -> None:
     """Trace l'accès dans monitoring.audit_log. Un échec de l'audit est
     signalé mais ne bloque pas le pipeline : comme pour l'alerte Slack,
     la traçabilité ne doit pas masquer ni provoquer une autre panne.
@@ -59,7 +59,7 @@ def _audit(action: str, resource: str) -> None:
         print(f"[PIPELINE] audit non enregistré ({action} {resource}) : {exc}", file=sys.stderr)
 
 
-def _check_access() -> None:
+def check_access() -> None:
     """Vérifie, avant de lire des données RH, que le rôle PostgreSQL du
     pipeline a bien le droit de lire l'historique d'activités.
     """
@@ -74,7 +74,7 @@ _EMPLOYEE_TABLE_COLUMNS = [
 ]
 
 
-def _sync_employees(rh) -> int:
+def sync_employees(rh) -> int:
     """Met à jour le référentiel salarié de PostgreSQL (utilisé par le
     notifier Slack), avec salaire et adresse chiffrés.
     """
@@ -100,19 +100,19 @@ def run_pipeline(run_date: Optional[datetime] = None) -> None:
     run_id = _new_run_id(run_date)
 
     try:
-        _run_step(run_id, "check_access", _check_access)
+        _run_step(run_id, "check_access", check_access)
 
         rh = _run_step(run_id, "extract_rh", extract.extract_employees_with_distance)
-        _audit("read", "referentiel_rh")
-        _run_step(run_id, "sync_employees", _sync_employees, rh)
-        _audit("write_encrypted", "employees")
+        audit("read", "referentiel_rh")
+        _run_step(run_id, "sync_employees", sync_employees, rh)
+        audit("write_encrypted", "employees")
         extract.write_bronze_parquet(rh, "employees")
 
         sport = _run_step(run_id, "extract_sport", extract.extract_sport_referential)
         extract.write_bronze_parquet(sport, "sport_declare")
 
         activities = _run_step(run_id, "extract_activities", extract.extract_activities_from_postgres)
-        _audit("read", "activities")
+        audit("read", "activities")
         extract.write_bronze_parquet(activities, "activities")
 
         _run_step(run_id, "dbt_run", transform.run_dbt_transform)
@@ -129,7 +129,7 @@ def run_pipeline(run_date: Optional[datetime] = None) -> None:
 
     try:
         _run_step(run_id, "export_gold", load.export_gold_to_postgres)
-        _audit("export", "gold.gold_kpi")
+        audit("export", "gold.gold_kpi")
     except Exception:
         return
 
@@ -143,7 +143,7 @@ def replay_pipeline(new_params: dict, run_date: Optional[datetime] = None) -> No
     try:
         _run_step(run_id, "replay_kpis", transform.replay_historical_kpis, new_params)
         _run_step(run_id, "export_gold", load.export_gold_to_postgres)
-        _audit("replay_export", "gold.gold_kpi")
+        audit("replay_export", "gold.gold_kpi")
     except Exception:
         return
 

@@ -14,7 +14,7 @@ def _patch_happy_path(monkeypatch, calls):
     monkeypatch.setattr(pipeline.load, "export_gold_to_postgres", lambda: calls.append("export_gold") or 5)
     monkeypatch.setattr(pipeline.monitoring, "log_run_metrics", lambda *a, **k: calls.append(("log", a[1])))
     monkeypatch.setattr(pipeline.monitoring, "send_alert", lambda *a, **k: calls.append(("alert", a)))
-    monkeypatch.setattr(pipeline, "_sync_employees", lambda rh: calls.append("sync_employees") or len(rh))
+    monkeypatch.setattr(pipeline, "sync_employees", lambda rh: calls.append("sync_employees") or len(rh))
     monkeypatch.setattr(pipeline.security, "apply_access_control", lambda user, resource: True)
     monkeypatch.setattr(pipeline.security, "audit_log", lambda action, user, resource: calls.append(("audit", action, resource)))
 
