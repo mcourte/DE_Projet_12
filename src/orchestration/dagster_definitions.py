@@ -26,16 +26,24 @@ def access_check() -> None:
 
 @asset(deps=[access_check])
 def bronze_employees(context: AssetExecutionContext) -> None:
-    """Extrait le référentiel RH + géocodage/distance, met à jour le
-    référentiel PostgreSQL (salaire et adresse chiffrés), écrit en Parquet
+    """Extrait le référentiel RH + géocodage/distance, écrit en Parquet
     (cf. src/extract.py -> extract_rh_referential, write_bronze_parquet).
     """
     df = extract.extract_employees_with_distance()
     pipeline.audit("read", "referentiel_rh")
-    pipeline.sync_employees(df)
-    pipeline.audit("write_encrypted", "employees")
     extract.write_bronze_parquet(df, "employees")
     context.add_output_metadata({"row_count": len(df)})
+
+
+@asset(deps=[bronze_employees])
+def employees_in_postgres(context: AssetExecutionContext) -> None:
+    """Met à jour le référentiel salarié de PostgreSQL (lu par le notifier
+    Slack), avec salaire et adresse chiffrés, à partir de l'extrait bronze.
+    """
+    df = extract.read_bronze_parquet("employees")
+    row_count = load.sync_employee_referential(df)
+    pipeline.audit("write_encrypted", "employees")
+    context.add_output_metadata({"row_count": row_count})
 
 
 @asset
@@ -91,6 +99,6 @@ daily_kpi_schedule = ScheduleDefinition(
 )
 
 defs = Definitions(
-    assets=[access_check, bronze_employees, bronze_sport_declare, bronze_activities, dbt_gold_kpi, gold_kpi_in_postgres],
+    assets=[access_check, bronze_employees, employees_in_postgres, bronze_sport_declare, bronze_activities, dbt_gold_kpi, gold_kpi_in_postgres],
     schedules=[daily_kpi_schedule],
 )

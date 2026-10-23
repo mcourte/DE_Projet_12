@@ -14,7 +14,7 @@ def _patch_happy_path(monkeypatch, calls):
     monkeypatch.setattr(pipeline.load, "export_gold_to_postgres", lambda: calls.append("export_gold") or 5)
     monkeypatch.setattr(pipeline.monitoring, "log_run_metrics", lambda *a, **k: calls.append(("log", a[1])))
     monkeypatch.setattr(pipeline.monitoring, "send_alert", lambda *a, **k: calls.append(("alert", a)))
-    monkeypatch.setattr(pipeline, "sync_employees", lambda rh: calls.append("sync_employees") or len(rh))
+    monkeypatch.setattr(pipeline.load, "sync_employee_referential", lambda rh: calls.append("sync_employees") or len(rh))
     monkeypatch.setattr(pipeline.security, "apply_access_control", lambda user, resource: True)
     monkeypatch.setattr(pipeline.security, "audit_log", lambda action, user, resource: calls.append(("audit", action, resource)))
 
@@ -174,3 +174,17 @@ def test_failed_step_is_logged_with_failed_status(monkeypatch):
     pipeline.run_pipeline()
 
     assert ("extract_rh", "failed") in logged
+
+
+def test_run_dbt_tests_or_fail_raises_with_failure_count(monkeypatch):
+    monkeypatch.setattr(pipeline.quality_checks, "run_dbt_tests", lambda: False)
+    monkeypatch.setattr(pipeline.quality_checks, "parse_dbt_run_results", lambda: [{"id": 1}, {"id": 2}])
+
+    with pytest.raises(RuntimeError, match="2 test"):
+        pipeline.run_dbt_tests_or_fail()
+
+
+def test_run_dbt_tests_or_fail_silent_when_tests_pass(monkeypatch):
+    monkeypatch.setattr(pipeline.quality_checks, "run_dbt_tests", lambda: True)
+
+    pipeline.run_dbt_tests_or_fail()  # ne lève rien

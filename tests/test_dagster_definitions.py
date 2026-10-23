@@ -8,6 +8,7 @@ from src.orchestration import dagster_definitions as dd
 ALL_ASSETS = [
     dd.access_check,
     dd.bronze_employees,
+    dd.employees_in_postgres,
     dd.bronze_sport_declare,
     dd.bronze_activities,
     dd.dbt_gold_kpi,
@@ -24,7 +25,8 @@ def _patch_happy_path(monkeypatch, calls):
     monkeypatch.setattr(dd.quality_checks, "run_dbt_tests", lambda: True)
     monkeypatch.setattr(dd.load, "export_gold_to_postgres", lambda: calls.append("export_gold") or 5)
     monkeypatch.setattr(dd.pipeline, "check_access", lambda: calls.append("check_access"))
-    monkeypatch.setattr(dd.pipeline, "sync_employees", lambda df: calls.append("sync_employees") or len(df))
+    monkeypatch.setattr(dd.extract, "read_bronze_parquet", lambda name: pd.DataFrame({"a": [1, 2]}))
+    monkeypatch.setattr(dd.load, "sync_employee_referential", lambda df: calls.append("sync_employees") or len(df))
     monkeypatch.setattr(dd.pipeline, "audit", lambda action, resource: calls.append(("audit", action, resource)))
 
 
@@ -64,6 +66,7 @@ def test_definitions_expose_all_assets():
     assert asset_keys == {
         "access_check",
         "bronze_employees",
+        "employees_in_postgres",
         "bronze_sport_declare",
         "bronze_activities",
         "dbt_gold_kpi",

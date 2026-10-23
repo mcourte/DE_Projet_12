@@ -68,68 +68,60 @@ def check_access() -> None:
         raise PermissionError(f"Le rôle PostgreSQL '{user}' n'a pas le droit SELECT sur activities")
 
 
-_EMPLOYEE_TABLE_COLUMNS = [
-    "id_salarie", "nom", "prenom", "date_naissance", "bu", "date_embauche",
-    "salaire_brut", "type_contrat", "nombre_jours_cp", "adresse_domicile", "moyen_deplacement",
-]
-
-
-def sync_employees(rh) -> int:
-    """Met à jour le référentiel salarié de PostgreSQL (utilisé par le
-    notifier Slack), avec salaire et adresse chiffrés.
+def run_dbt_tests_or_fail() -> None:
+    """Lance les tests dbt ; lève une erreur résumant les échecs s'il y en a,
+    pour que l'étape soit traitée comme les autres (journal, alerte, arrêt).
     """
-    df = rh[_EMPLOYEE_TABLE_COLUMNS].astype(object)
-    df = df.where(df.notna(), None)
+    if not quality_checks.run_dbt_tests():
+        failures = quality_checks.parse_dbt_run_results()
+        raise RuntimeError(f"{len(failures)} test(s) dbt en échec")
 
-    load.ensure_employees_table()
-    fields = security.sensitive_fields()
-    security.ensure_encrypted_columns("employees", fields)
-    encrypted = security.encrypt_sensitive_fields(df, fields)
-    return load.upsert_employee_referential(encrypted)
+
+def _ingest(run_id: str) -> None:
+    """Phase 1 : vérifie les droits, lit les sources, met à jour le
+    référentiel salarié chiffré et écrit les extraits bronze."""
+    _run_step(run_id, "check_access", check_access)
+
+    rh = _run_step(run_id, "extract_rh", extract.extract_employees_with_distance)
+    audit("read", "referentiel_rh")
+    _run_step(run_id, "sync_employees", load.sync_employee_referential, rh)
+    audit("write_encrypted", "employees")
+    extract.write_bronze_parquet(rh, "employees")
+
+    sport = _run_step(run_id, "extract_sport", extract.extract_sport_referential)
+    extract.write_bronze_parquet(sport, "sport_declare")
+
+    activities = _run_step(run_id, "extract_activities", extract.extract_activities_from_postgres)
+    audit("read", "activities")
+    extract.write_bronze_parquet(activities, "activities")
+
+
+def _transform(run_id: str) -> None:
+    """Phase 2 : transformations dbt (bronze → silver → gold), puis tests."""
+    _run_step(run_id, "dbt_run", transform.run_dbt_transform)
+    _run_step(run_id, "dbt_test", run_dbt_tests_or_fail)
+
+
+def _publish(run_id: str) -> None:
+    """Phase 3 : exporte la couche gold vers PostgreSQL, lue par Power BI."""
+    _run_step(run_id, "export_gold", load.export_gold_to_postgres)
+    audit("export", "gold.gold_kpi")
 
 
 def run_pipeline(run_date: Optional[datetime] = None) -> None:
-    """Exécute la séquence complète : extraction → dbt run (qualité +
-    transformation) → export gold vers Postgres. La notification Slack
-    ne fait pas partie de cette séquence : elle tourne en continu,
-    déclenchée par le bus NATS (cf. src/notifier.py).
+    """Exécute les trois phases dans l'ordre : lecture des sources,
+    transformation et tests dbt, export gold. La notification Slack ne fait
+    pas partie de cette séquence : elle tourne en continu, déclenchée par
+    le bus NATS (cf. src/notifier.py).
 
-    S'arrête à la première étape en échec, sans exécuter les suivantes.
+    S'arrête à la première étape en échec, sans exécuter les suivantes
+    (l'échec est déjà journalisé et alerté par _run_step).
     """
-    run_date = run_date or datetime.now()
-    run_id = _new_run_id(run_date)
-
+    run_id = _new_run_id(run_date or datetime.now())
     try:
-        _run_step(run_id, "check_access", check_access)
-
-        rh = _run_step(run_id, "extract_rh", extract.extract_employees_with_distance)
-        audit("read", "referentiel_rh")
-        _run_step(run_id, "sync_employees", sync_employees, rh)
-        audit("write_encrypted", "employees")
-        extract.write_bronze_parquet(rh, "employees")
-
-        sport = _run_step(run_id, "extract_sport", extract.extract_sport_referential)
-        extract.write_bronze_parquet(sport, "sport_declare")
-
-        activities = _run_step(run_id, "extract_activities", extract.extract_activities_from_postgres)
-        audit("read", "activities")
-        extract.write_bronze_parquet(activities, "activities")
-
-        _run_step(run_id, "dbt_run", transform.run_dbt_transform)
-    except Exception:
-        return  # déjà journalisé par _run_step -> handle_pipeline_failure
-
-    start = time.monotonic()
-    if not quality_checks.run_dbt_tests():
-        failures = quality_checks.parse_dbt_run_results()
-        _log_failure(run_id, "dbt_test", time.monotonic() - start)
-        handle_pipeline_failure("dbt_test", RuntimeError(f"{len(failures)} test(s) dbt en échec"))
-        return
-    monitoring.log_run_metrics(run_id, "dbt_test", 0, time.monotonic() - start)
-
-    try:
-        _run_step(run_id, "export_gold", load.export_gold_to_postgres)
-        audit("export", "gold.gold_kpi")
+        _ingest(run_id)
+        _transform(run_id)
+        _publish(run_id)
     except Exception:
         return
 
