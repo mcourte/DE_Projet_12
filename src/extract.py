@@ -125,48 +125,66 @@ def extract_activities_from_postgres(schema: Optional[str] = None) -> pd.DataFra
     return pd.read_sql(query, engine)
 
 
-def _load_geocode_cache() -> dict:
-    if not _GEOCODE_CACHE_PATH.exists():
+def _read_json(path: Path) -> dict:
+    """Lit un cache JSON ; un fichier absent donne un cache vide."""
+    if not path.exists():
         return {}
-    with open(_GEOCODE_CACHE_PATH, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def _save_geocode_cache(cache: dict) -> None:
-    _GEOCODE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_GEOCODE_CACHE_PATH, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False, indent=2)
+def _write_json(path: Path, data: dict, indent: Optional[int] = None) -> None:
+    """Écrit un cache JSON, en créant le dossier si besoin."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=indent)
 
 
-def geocode_address(address: str, _client=None) -> Tuple[float, float]:
-    """Convertit une adresse en coordonnées via l'API Google Maps, avec
-    mise en cache disque pour limiter les appels redondants (facturés
-    au-delà du quota gratuit).
+def _google_client(_client=None):
+    """Client Google Maps : celui fourni (tests) ou un client réel, avec
+    la clé `GOOGLE_MAPS_API_KEY` de l'environnement."""
+    if _client is not None:
+        return _client
 
-    `_client` permet d'injecter un client googlemaps factice dans les
-    tests, sans appel réseau réel.
-    """
-    cache = _load_geocode_cache()
-    if address in cache:
-        lat, lng = cache[address]
-        return (lat, lng)
+    import googlemaps
 
-    if _client is None:
-        import googlemaps
+    return googlemaps.Client(key=os.environ["GOOGLE_MAPS_API_KEY"])
 
-        api_key = os.environ["GOOGLE_MAPS_API_KEY"]
-        _client = googlemaps.Client(key=api_key)
 
-    results = _client.geocode(address)
+def _request_coordinates(address: str, _client=None) -> Tuple[float, float]:
+    """Appelle l'API de géocodage Google Maps pour une adresse."""
+    results = _google_client(_client).geocode(address)
     if not results:
         raise ValueError(f"Adresse introuvable via l'API Google Maps : {address!r}")
 
     location = results[0]["geometry"]["location"]
-    coords = (location["lat"], location["lng"])
+    return (location["lat"], location["lng"])
 
+
+def geocode_address(address: str, _client=None) -> Tuple[float, float]:
+    """Convertit une adresse en coordonnées, avec mise en cache disque
+    pour limiter les appels redondants (facturés au-delà du quota gratuit).
+
+    `_client` permet d'injecter un client googlemaps factice dans les
+    tests, sans appel réseau réel.
+    """
+    cache = _read_json(_GEOCODE_CACHE_PATH)
+    if address in cache:
+        lat, lng = cache[address]
+        return (lat, lng)
+
+    coords = _request_coordinates(address, _client)
     cache[address] = coords
-    _save_geocode_cache(cache)
+    _write_json(_GEOCODE_CACHE_PATH, cache, indent=2)
     return coords
+
+
+def _travel_mode(mode: str) -> str:
+    """Traduit le mode déclaré (fichier RH) en mode Google Maps."""
+    travel_mode = _MODE_TO_GOOGLE_TRAVEL_MODE.get(mode)
+    if travel_mode is None:
+        raise ValueError(f"Mode de déplacement inconnu : {mode!r}")
+    return travel_mode
 
 
 def compute_commute_distance(
@@ -175,21 +193,12 @@ def compute_commute_distance(
     """Calcule la distance domicile → bureau selon le mode déclaré
     (API Google Maps Distance Matrix), en kilomètres.
     """
-    travel_mode = _MODE_TO_GOOGLE_TRAVEL_MODE.get(mode)
-    if travel_mode is None:
-        raise ValueError(f"Mode de déplacement inconnu : {mode!r}")
-
+    travel_mode = _travel_mode(mode)
     office_address = get_param(
         "entreprise.adresse", default="1362 Av. des Platanes, 34970 Lattes"
     )
 
-    if _client is None:
-        import googlemaps
-
-        api_key = os.environ["GOOGLE_MAPS_API_KEY"]
-        _client = googlemaps.Client(key=api_key)
-
-    result = _client.distance_matrix(
+    result = _google_client(_client).distance_matrix(
         origins=[home_coords], destinations=[office_address], mode=travel_mode
     )
     element = result["rows"][0]["elements"][0]
@@ -206,47 +215,48 @@ _DISTANCE_CACHE_PATH = _PROJECT_ROOT / "data" / "bronze" / ".distance_cache.json
 _MAX_DISTANCE_FAILURE_RATIO = 0.10
 
 
-def enrich_with_commute_distance(df: pd.DataFrame, _client=None) -> pd.DataFrame:
-    """Ajoute `distance_domicile_bureau_km` au référentiel RH : géocodage
-    de l'adresse puis distance selon le mode déclaré (API Google Maps).
-
-    Les résultats sont mis en cache sur disque (adresse + mode) pour ne
-    pas refacturer l'API à chaque exécution du pipeline. Une adresse
-    non résolue donne une distance vide ; si plus de 10 % des lignes
-    échouent, on lève une erreur plutôt que de laisser passer des
-    éligibilités à la prime non vérifiées.
+def _resolve_distance_km(row, cache: dict, _client=None) -> float:
+    """Distance domicile-bureau d'un salarié : lue dans le cache (adresse
+    + mode) si elle y est, sinon calculée via Google Maps puis mise en cache.
     """
-    cache = {}
-    if _DISTANCE_CACHE_PATH.exists():
-        with open(_DISTANCE_CACHE_PATH, "r", encoding="utf-8") as f:
-            cache = json.load(f)
+    key = f"{row['adresse_domicile']}|{row['moyen_deplacement']}"
+    if key in cache:
+        return cache[key]
+
+    coords = geocode_address(row["adresse_domicile"], _client=_client)
+    km = compute_commute_distance(coords, row["moyen_deplacement"], _client=_client)
+    cache[key] = km
+    return km
+
+
+def _raise_if_too_many_failures(failures: int, total: int) -> None:
+    """Arrête le pipeline si trop de distances n'ont pas pu être calculées :
+    mieux vaut ne rien calculer que verser des primes non vérifiées."""
+    if total and failures / total > _MAX_DISTANCE_FAILURE_RATIO:
+        raise RuntimeError(
+            f"Géocodage en échec pour {failures}/{total} salariés "
+            f"(seuil {_MAX_DISTANCE_FAILURE_RATIO:.0%}) — vérifier GOOGLE_MAPS_API_KEY et le quota."
+        )
+
+
+def enrich_with_commute_distance(df: pd.DataFrame, _client=None) -> pd.DataFrame:
+    """Ajoute `distance_domicile_bureau_km` au référentiel RH. Une adresse
+    non résolue donne une distance vide ; au-delà de 10 % d'échecs, une
+    erreur est levée.
+    """
+    cache = _read_json(_DISTANCE_CACHE_PATH)
 
     distances = []
     failures = 0
     for _, row in df.iterrows():
-        key = f"{row['adresse_domicile']}|{row['moyen_deplacement']}"
-        if key in cache:
-            distances.append(cache[key])
-            continue
         try:
-            coords = geocode_address(row["adresse_domicile"], _client=_client)
-            km = compute_commute_distance(coords, row["moyen_deplacement"], _client=_client)
+            distances.append(_resolve_distance_km(row, cache, _client))
         except Exception:
             failures += 1
             distances.append(None)
-            continue
-        cache[key] = km
-        distances.append(km)
 
-    _DISTANCE_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with open(_DISTANCE_CACHE_PATH, "w", encoding="utf-8") as f:
-        json.dump(cache, f, ensure_ascii=False)
-
-    if len(df) and failures / len(df) > _MAX_DISTANCE_FAILURE_RATIO:
-        raise RuntimeError(
-            f"Géocodage en échec pour {failures}/{len(df)} salariés "
-            f"(seuil {_MAX_DISTANCE_FAILURE_RATIO:.0%}) — vérifier GOOGLE_MAPS_API_KEY et le quota."
-        )
+    _write_json(_DISTANCE_CACHE_PATH, cache)
+    _raise_if_too_many_failures(failures, len(df))
 
     result = df.copy()
     result["distance_domicile_bureau_km"] = distances
@@ -259,13 +269,22 @@ def extract_employees_with_distance(path: Optional[str] = None, _client=None) ->
     return enrich_with_commute_distance(extract_rh_referential(path), _client=_client)
 
 
+def _bronze_dir(name: str) -> Path:
+    bronze_root = _PROJECT_ROOT / get_param("warehouse.bronze_path", default="data/bronze")
+    return bronze_root / name
+
+
+def read_bronze_parquet(name: str) -> pd.DataFrame:
+    """Relit un extrait bronze déjà écrit par write_bronze_parquet."""
+    return pd.read_parquet(_bronze_dir(name) / "part-0.parquet")
+
+
 def write_bronze_parquet(df: pd.DataFrame, name: str) -> str:
     """Écrit un DataFrame en Parquet sous data/bronze/<name>/, lu
     ensuite par les modèles dbt `bronze_*` via read_parquet(). Renvoie
     le chemin écrit.
     """
-    bronze_root = _PROJECT_ROOT / get_param("warehouse.bronze_path", default="data/bronze")
-    out_dir = bronze_root / name
+    out_dir = _bronze_dir(name)
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / "part-0.parquet"
     df.to_parquet(out_path, index=False)

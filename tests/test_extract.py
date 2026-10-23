@@ -141,3 +141,36 @@ def test_enrich_with_commute_distance_raises_when_too_many_failures(tmp_path, mo
 
     with pytest.raises(RuntimeError):
         extract.enrich_with_commute_distance(_employees(["x", "y", "ok"]), _client=client)
+
+
+def test_raise_if_too_many_failures_only_above_threshold():
+    extract._raise_if_too_many_failures(1, 20)  # 5 % : toléré
+    extract._raise_if_too_many_failures(0, 0)  # rien à traiter
+    with pytest.raises(RuntimeError):
+        extract._raise_if_too_many_failures(3, 20)  # 15 % : trop
+
+
+def test_resolve_distance_km_reads_cache_without_calling_api(monkeypatch):
+    def boom(*args, **kwargs):
+        raise AssertionError("l'API ne doit pas être appelée")
+
+    monkeypatch.setattr(extract, "geocode_address", boom)
+    row = {"adresse_domicile": "1 rue A", "moyen_deplacement": "Marche/running"}
+
+    assert extract._resolve_distance_km(row, {"1 rue A|Marche/running": 4.2}) == 4.2
+
+
+def test_resolve_distance_km_stores_result_in_cache(monkeypatch):
+    monkeypatch.setattr(extract, "geocode_address", lambda address, _client=None: (43.6, 3.9))
+    monkeypatch.setattr(extract, "compute_commute_distance", lambda coords, mode, _client=None: 7.5)
+    row = {"adresse_domicile": "2 rue B", "moyen_deplacement": "Vélo/Trottinette/Autres"}
+    cache = {}
+
+    assert extract._resolve_distance_km(row, cache) == 7.5
+    assert cache == {"2 rue B|Vélo/Trottinette/Autres": 7.5}
+
+
+def test_travel_mode_translates_and_rejects_unknown():
+    assert extract._travel_mode("Marche/running") == "walking"
+    with pytest.raises(ValueError):
+        extract._travel_mode("Téléportation")
