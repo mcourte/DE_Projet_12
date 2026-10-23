@@ -65,7 +65,7 @@ Placer ensuite `Donnees_RH.xlsx` et `Donnees_Sportive.xlsx` dans `data/raw/`, pu
 ## Utilisation
 
 ```bash
-cp .env.example .env                      # puis renseigner SLACK_BOT_TOKEN et GOOGLE_MAPS_API_KEY
+cp .env.example .env                      # puis renseigner SLACK_BOT_TOKEN, GOOGLE_MAPS_API_KEY et PGCRYPTO_PASSPHRASE
 python -m src.generator seed               # (1re installation) génère 12 mois d'activités ; --reset pour remplacer
 python -m src.pipeline run                # extraction + distances Google Maps + dbt + tests + export gold
 python -m src.pipeline replay --taux-prime 0.10   # rejoue l'historique avec un nouveau taux, puis exporte
@@ -85,7 +85,7 @@ tous les jours à 6h ; il enchaîne les mêmes étapes, y compris le contrôle d
   *Materialize all* lance la même chaîne que `pipeline run`.
 - **Power BI** : ouvrir `POC_Avantages_Sportifs.pbix` (ou se connecter à PostgreSQL `localhost:5432`, base `sportdata`,
   table `gold.gold_kpi`), puis *Actualiser*.
-- **Grafana** : http://localhost:3000 (dashboard « Monitoring du pipeline »). La source de données et le
+- **Grafana** : http://localhost:3000, identifiants `admin` / `changeme` (dashboard « Monitoring du pipeline »). La source de données et le
   dashboard sont provisionnés automatiquement depuis `grafana/` ; les métriques viennent de `monitoring.pipeline_runs`.
 - **Alertes d'échec** : message `[CRITICAL] …` dans le channel Slack privé `#pipeline_alerte`. Un channel privé
   s'adresse par son identifiant (`slack.alert_channel` dans `config/config.yaml`), et le bot doit y être invité
