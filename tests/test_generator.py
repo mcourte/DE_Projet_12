@@ -174,3 +174,45 @@ def test_main_live_uses_declared_sport_by_default(monkeypatch, capsys):
 
     assert calls == [(42, "Runing")]
     assert "Activité 7 ajoutée" in capsys.readouterr().out
+
+
+def _patch_seed_environment(monkeypatch, engine):
+    import src.extract as extract
+
+    monkeypatch.setattr(generator, "_postgres_engine", lambda: engine)
+    monkeypatch.setattr(generator, "get_param", lambda key, default=None: None if "schema" in key else default)
+    sports = pd.DataFrame({"id_salarie": [1, 2, 3], "pratique_sport": ["Runing", "Tennis", float("nan")]})
+    monkeypatch.setattr(extract, "extract_sport_referential", lambda: sports)
+
+
+def test_seed_history_creates_table_and_skips_employees_without_sport(monkeypatch):
+    engine = create_engine("sqlite:///:memory:")
+    _patch_seed_environment(monkeypatch, engine)
+
+    inserted = generator.seed_history(now=datetime(2025, 1, 1))
+
+    assert inserted > 0
+    with engine.connect() as conn:
+        employees = {r[0] for r in conn.execute(text("select distinct id_salarie from activities")).all()}
+    assert employees <= {1, 2}  # le salarié 3 n'a pas de sport déclaré
+
+
+def test_seed_history_refuses_to_overwrite_without_reset(monkeypatch):
+    engine = create_engine("sqlite:///:memory:")
+    _patch_seed_environment(monkeypatch, engine)
+    first = generator.seed_history(now=datetime(2025, 1, 1))
+
+    with pytest.raises(SystemExit):
+        generator.seed_history(now=datetime(2025, 1, 1))
+
+    assert generator.seed_history(reset=True, now=datetime(2025, 1, 1)) == first
+    with engine.connect() as conn:
+        assert conn.execute(text("select count(*) from activities")).scalar_one() == first
+
+
+def test_main_seed_prints_count(monkeypatch, capsys):
+    monkeypatch.setattr(generator, "seed_history", lambda reset: 123)
+
+    generator.main(["seed"])
+
+    assert "123 activités insérées" in capsys.readouterr().out

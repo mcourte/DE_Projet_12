@@ -167,6 +167,69 @@ def seed_operational_db(activities_df: pd.DataFrame) -> int:
     return len(activities_df)
 
 
+def ensure_activities_table() -> None:
+    """Crée la table `activities` de la base opérationnelle si elle
+    n'existe pas encore (nouvelle installation)."""
+    from sqlalchemy import text
+
+    engine = _postgres_engine()
+    schema = get_param("postgres.schema_operational", default="public")
+    table = qualified_table(schema, "activities")
+    is_postgres = engine.dialect.name == "postgresql"
+    id_column = "id serial primary key" if is_postgres else "id integer primary key autoincrement"
+    ddl = f"""
+        create table if not exists {table} (
+            {id_column},
+            id_salarie integer,
+            date_debut timestamp,
+            date_fin timestamp,
+            type text,
+            distance_m real,
+            commentaire text
+        )
+    """
+    with engine.begin() as conn:
+        conn.execute(text(ddl))
+
+
+def seed_history(reset: bool = False, now: Optional[datetime] = None) -> int:
+    """Chargement initial : génère 12 mois d'activités pour chaque salarié
+    ayant déclaré un sport (fichier Données Sportive) et les insère dans
+    PostgreSQL. Refuse d'écraser des activités existantes sans `reset`.
+    Retourne le nombre d'activités insérées.
+    """
+    from sqlalchemy import text
+
+    from src.extract import extract_sport_referential
+
+    ensure_activities_table()
+    engine = _postgres_engine()
+    schema = get_param("postgres.schema_operational", default="public")
+    table = qualified_table(schema, "activities")
+
+    with engine.begin() as conn:
+        existing = conn.execute(text(f"select count(*) from {table}")).scalar_one()
+        if existing and not reset:
+            raise SystemExit(
+                f"La table activities contient déjà {existing} lignes : relancer avec --reset "
+                "pour les remplacer (les activités ajoutées en direct seront perdues)."
+            )
+        if reset:
+            conn.execute(text(f"delete from {table}"))
+
+    end = now or datetime.now()
+    start = end - timedelta(days=365)
+    sports = extract_sport_referential()
+    frames = [
+        generate_activity_history(int(row["id_salarie"]), row["pratique_sport"], start, end)
+        for _, row in sports.iterrows()
+    ]
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return 0
+    return seed_operational_db(pd.concat(frames, ignore_index=True))
+
+
 async def _publish_async(subject: str, payload: bytes, nats_url: str) -> None:
     import nats
 
@@ -229,10 +292,17 @@ def main(argv=None) -> None:
 
     parser = argparse.ArgumentParser(description="Génération d'activités pour la démonstration")
     sub = parser.add_subparsers(dest="command", required=True)
+    seed = sub.add_parser("seed", help="chargement initial : 12 mois d'activités pour tous les salariés")
+    seed.add_argument("--reset", action="store_true", help="remplace les activités déjà présentes")
     live = sub.add_parser("live", help="ajoute une activité maintenant (base + NATS -> Slack)")
     live.add_argument("--salarie", type=int, required=True, help="ID du salarié")
     live.add_argument("--sport", help="sport de l'activité (par défaut : le sport déclaré du salarié)")
     args = parser.parse_args(argv)
+
+    if args.command == "seed":
+        count = seed_history(reset=args.reset)
+        print(f"{count} activités insérées.")
+        return
 
     sport = args.sport or _declared_sport(args.salarie)
     activity = emit_live_activity(args.salarie, sport)
