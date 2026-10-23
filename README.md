@@ -80,6 +80,9 @@ pytest                                    # 68 tests (attention : remplace les d
 qu'à simuler un autre taux. Un orchestrateur Dagster est aussi fourni (`src/orchestration/`), planifié
 tous les jours à 6h ; il enchaîne les mêmes étapes, y compris le contrôle d'accès, le chiffrement et l'audit.
 
+- **Dagster** : `dagster dev -m src.orchestration.dagster_definitions -p 3001`, puis http://localhost:3001
+  (le port 3000, par défaut, est pris par Grafana). Les 6 assets et le planning `0 6 * * *` y sont visibles ;
+  *Materialize all* lance la même chaîne que `pipeline run`.
 - **Power BI** : ouvrir `POC_Avantages_Sportifs.pbix` (ou se connecter à PostgreSQL `localhost:5432`, base `sportdata`,
   table `gold.gold_kpi`), puis *Actualiser*.
 - **Grafana** : http://localhost:3000 (dashboard « Monitoring du pipeline »). La source de données et le
