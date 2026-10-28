@@ -49,35 +49,37 @@ def _duration_minutes(activity: dict) -> float:
     return (fin - debut).total_seconds() / 60
 
 
-def format_slack_message(activity: dict, employee: dict) -> str:
-    """Génère un message personnalisé et encourageant à partir d'une
-    activité (« Bravo X ! Tu viens de courir... »).
-    """
+def _effort_sentence(activity: dict, employee: dict) -> str:
+    """Phrase d'encouragement selon que l'activité a une distance ou non
+    (« Tu viens de courir 5,2 km… » ou « Match de tennis : 85 min d'effort ! »)."""
     prenom = employee.get("prenom", "")
     nom = employee.get("nom", "")
     sport = activity.get("type", "activité")
     style = _SPORT_STYLE.get(sport, {})
-    emoji = style.get("emoji", "💪")
     duree_min = _duration_minutes(activity)
 
-    if activity.get("distance_m"):
-        distance_km = activity["distance_m"] / 1000
-        if "verbe" in style:
-            base = (
-                f"Bravo {prenom} {nom} ! Tu viens de {style['verbe']} "
-                f"{distance_km:.1f} km en {duree_min:.0f} min !"
-            )
-        else:
-            nom_activite = style.get("nom_activite", sport.lower())
-            base = (
-                f"Bravo {prenom} {nom} ! {distance_km:.1f} km parcourus en "
-                f"{duree_min:.0f} min ({nom_activite}) !"
-            )
-    else:
+    if not activity.get("distance_m"):
         nom_activite = style.get("nom_activite", sport.lower())
-        base = f"Bravo {prenom} {nom} ! {nom_activite.capitalize()} : {duree_min:.0f} min d'effort !"
+        return f"Bravo {prenom} {nom} ! {nom_activite.capitalize()} : {duree_min:.0f} min d'effort !"
 
-    message = f"{base} {emoji}"
+    distance_km = activity["distance_m"] / 1000
+    if "verbe" in style:
+        return (
+            f"Bravo {prenom} {nom} ! Tu viens de {style['verbe']} "
+            f"{distance_km:.1f} km en {duree_min:.0f} min !"
+        )
+    nom_activite = style.get("nom_activite", sport.lower())
+    return (
+        f"Bravo {prenom} {nom} ! {distance_km:.1f} km parcourus en "
+        f"{duree_min:.0f} min ({nom_activite}) !"
+    )
+
+
+def format_slack_message(activity: dict, employee: dict) -> str:
+    """Message complet : phrase d'encouragement, emoji du sport, puis le
+    commentaire du salarié s'il y en a un."""
+    emoji = _SPORT_STYLE.get(activity.get("type", "activité"), {}).get("emoji", "💪")
+    message = f"{_effort_sentence(activity, employee)} {emoji}"
     commentaire = activity.get("commentaire")
     if commentaire:
         message += f' ("{commentaire}")'
