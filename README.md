@@ -70,7 +70,7 @@ python -m src.generator seed               # (1re installation) génère 12 mois
 python -m src.pipeline run                # extraction + distances Google Maps + dbt + tests + export gold
 python -m src.pipeline replay --taux-prime 0.10   # rejoue l'historique avec un nouveau taux, puis exporte
 python -m src.notifier                    # processus long : écoute NATS et publie sur Slack
-python -m src.generator live --salarie 18918      # insère une activité (démo) : base + NATS -> Slack
+python -m src.generator live --salarie 71190      # insère une activité (démo) : base + NATS -> Slack
 pytest                                    # 78 tests (attention : remplace les données chargées par un jeu de test)
 ```
 
@@ -104,8 +104,8 @@ tous les jours à 6h ; il enchaîne les mêmes étapes, y compris le contrôle d
 
 ## Résultats du POC (données générées, vraies distances Google Maps)
 
-161 salariés · 5 240 activités · 68 éligibles à la prime (172 482,50 € au taux de 5 %) · 83 éligibles aux
-journées bien-être (415 jours) · 12/12 tests dbt · 0 anomalie de distance.
+161 salariés · 5 240 activités · 68 éligibles à la prime (172 482,50 € au taux de 5 %) · 82 éligibles aux
+journées bien-être (410 jours, 12 mois glissants au 31 octobre 2026) · 12/12 tests dbt · 0 anomalie de distance.
 
 ## Pistes d'évolution (hors périmètre du POC)
 
