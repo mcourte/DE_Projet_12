@@ -156,7 +156,7 @@ def test_handle_pipeline_failure_survives_alert_failure(monkeypatch, capsys):
 
     monkeypatch.setattr(pipeline.monitoring, "send_alert", broken_alert)
 
-    pipeline.handle_pipeline_failure("export_gold", RuntimeError("boom"))  # ne doit pas lever
+    pipeline.handle_pipeline_failure("export_gold", RuntimeError("boom"))
 
     err = capsys.readouterr().err
     assert "boom" in err
@@ -187,4 +187,4 @@ def test_run_dbt_tests_or_fail_raises_with_failure_count(monkeypatch):
 def test_run_dbt_tests_or_fail_silent_when_tests_pass(monkeypatch):
     monkeypatch.setattr(pipeline.quality_checks, "run_dbt_tests", lambda: True)
 
-    pipeline.run_dbt_tests_or_fail()  # ne lève rien
+    pipeline.run_dbt_tests_or_fail()

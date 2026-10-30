@@ -1,35 +1,31 @@
-# Infrastructure locale du POC — uniquement des briques open source.
-# DuckDB et dbt ne sont pas conteneurisés : DuckDB est un moteur embarqué
-# (simple fichier), dbt tourne comme process Python via Dagster.
-
 services:
   postgres:
-    image: postgres:16-alpine       # PostgreSQL License — open source
+    image: postgres:16-alpine
     container_name: sportdata-postgres
     environment:
       POSTGRES_DB: sportdata
       POSTGRES_USER: sportdata
-      POSTGRES_PASSWORD: changeme   # à surcharger via .env, jamais commité
+      POSTGRES_PASSWORD: changeme
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 
   nats:
-    image: nats:2-alpine            # Apache 2.0 — open source
+    image: nats:2-alpine
     container_name: sportdata-nats
     ports:
-      - "4222:4222"                 # client
-      - "8222:8222"                 # monitoring HTTP
+      - "4222:4222"
+      - "8222:8222"
 
   grafana:
-    image: grafana/grafana-oss:11.0.0   # AGPLv3 (OSI) — édition open source
+    image: grafana/grafana-oss:11.0.0
     container_name: sportdata-grafana
     ports:
       - "3000:3000"
     environment:
       GF_SECURITY_ADMIN_PASSWORD: changeme
-      POSTGRES_PASSWORD: changeme   # lu par la source de données provisionnée
+      POSTGRES_PASSWORD: changeme
     depends_on:
       - postgres
     volumes:

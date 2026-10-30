@@ -48,8 +48,6 @@ def test_encrypt_sensitive_fields_roundtrip_with_real_postgres(monkeypatch):
 
 @postgres_available
 def test_apply_access_control_with_real_postgres():
-    # L'utilisateur configuré dans .env doit au moins avoir SELECT sur
-    # ses propres tables — sinon rien d'autre ne fonctionnerait.
     user = os.environ.get("POSTGRES_USER", "sportdata")
     assert isinstance(security.apply_access_control(user, "employees"), bool)
 
@@ -65,7 +63,7 @@ def test_ensure_encrypted_columns_encrypts_existing_values_and_is_idempotent():
         conn.execute(text(f"insert into {table} values (1, 42000, 'Test')"))
     try:
         security.ensure_encrypted_columns(table, ["salaire_brut"])
-        security.ensure_encrypted_columns(table, ["salaire_brut"])  # deuxieme appel : sans effet
+        security.ensure_encrypted_columns(table, ["salaire_brut"])
 
         with engine.connect() as conn:
             data_type = conn.execute(

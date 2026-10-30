@@ -17,8 +17,6 @@ from src.config import get_param
 from src.extract import _postgres_engine, qualified_table
 from src.transform import _duckdb_path
 
-# Colonnes de la table `employees` (le référentiel RH en contient d'autres,
-# comme la distance domicile-bureau, qui ne vont pas dans cette table).
 _EMPLOYEE_TABLE_COLUMNS = [
     "id_salarie", "nom", "prenom", "date_naissance", "bu", "date_embauche",
     "salaire_brut", "type_contrat", "nombre_jours_cp", "adresse_domicile", "moyen_deplacement",

@@ -15,9 +15,6 @@ from typing import Optional
 from src.config import get_param
 from src.extract import _postgres_engine, qualified_table
 
-# Style par sport : verbe d'action (pour les sports à distance) ou nom
-# d'activité (sinon), plus un emoji — dans l'esprit des exemples de la
-# note de cadrage ("Bravo Juliette Mendes ! Tu viens de courir...").
 _SPORT_STYLE = {
     "Runing": {"verbe": "courir", "emoji": "🏃"},
     "Randonnée": {"nom_activite": "randonnée", "emoji": "🥾"},

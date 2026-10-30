@@ -54,8 +54,6 @@ def test_generate_activity_history_stays_within_bounds():
 
 def test_generate_activity_history_has_no_overlapping_activities():
     start, end = datetime(2024, 1, 1), datetime(2024, 12, 31)
-    # Beaucoup de graines différentes, pour augmenter les chances de
-    # générer un cas de chevauchement si le filtre ne marchait pas.
     for seed in range(30):
         df = generator.generate_activity_history(1, "Runing", start, end, rng=random.Random(seed))
         if len(df) < 2:
@@ -110,7 +108,7 @@ def test_seed_operational_db_empty_dataframe_noop(monkeypatch):
     monkeypatch.setattr(generator, "_postgres_engine", lambda: calls.append("called"))
     empty = pd.DataFrame(columns=generator._ACTIVITY_COLUMNS)
     assert generator.seed_operational_db(empty) == 0
-    assert calls == []  # jamais connecté si rien à insérer
+    assert calls == []
 
 
 def test_publish_activity_event_serializes_and_publishes(monkeypatch):
@@ -157,9 +155,9 @@ def test_declared_sport_found_and_missing(monkeypatch):
 
     assert generator._declared_sport(1) == "Natation"
     with pytest.raises(SystemExit):
-        generator._declared_sport(2)  # sport non renseigné
+        generator._declared_sport(2)
     with pytest.raises(SystemExit):
-        generator._declared_sport(99)  # salarié inconnu
+        generator._declared_sport(99)
 
 
 def test_main_live_uses_declared_sport_by_default(monkeypatch, capsys):
@@ -194,7 +192,7 @@ def test_seed_history_creates_table_and_skips_employees_without_sport(monkeypatc
     assert inserted > 0
     with engine.connect() as conn:
         employees = {r[0] for r in conn.execute(text("select distinct id_salarie from activities")).all()}
-    assert employees <= {1, 2}  # le salarié 3 n'a pas de sport déclaré
+    assert employees <= {1, 2}
 
 
 def test_seed_history_refuses_to_overwrite_without_reset(monkeypatch):
@@ -230,7 +228,7 @@ def test_month_windows_cover_period_and_cap_last_month():
 
     assert [w[0] for w in windows] == [datetime(2025, 1, 1), datetime(2025, 2, 1), datetime(2025, 3, 1)]
     assert windows[0][1] == datetime(2025, 2, 1)
-    assert windows[-1][1] == datetime(2025, 3, 10)  # bornée par la date de fin
+    assert windows[-1][1] == datetime(2025, 3, 10)
 
 
 def test_iter_activity_starts_stays_within_month_and_hours():

@@ -1,11 +1,3 @@
--- Anti-triche sur la formule C (5 journées bien-être).
--- Un salarié ne peut pas faire deux activités en même temps : ce test échoue
--- (renvoie des lignes) si deux activités du même salarié se chevauchent dans
--- le temps, symptôme d'une déclaration frauduleuse visant à gonfler le
--- nombre d'activités sur 12 mois au-delà du seuil de gold_wellbeing.sql.
---
--- Un test dbt doit renvoyer zéro ligne pour passer.
-
 select
     a.id_salarie,
     a.id as activite_1,

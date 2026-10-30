@@ -32,8 +32,6 @@ def test_get_param_missing_file_returns_default():
 def test_load_config_is_cached(tmp_path, monkeypatch):
     path = _write_config(tmp_path, "a: 1\n")
     first = config.load_config(path)
-    # On modifie le fichier après le premier chargement : le cache ne doit
-    # pas relire le disque tant que le chemin résolu est le même.
     with open(path, "w", encoding="utf-8") as f:
         f.write("a: 2\n")
     second = config.load_config(path)

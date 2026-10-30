@@ -95,7 +95,7 @@ daily_kpi_job = define_asset_job("daily_kpi_job", selection="*")
 
 daily_kpi_schedule = ScheduleDefinition(
     job=daily_kpi_job,
-    cron_schedule="0 6 * * *",  # tous les jours à 6h — à ajuster selon le besoin réel
+    cron_schedule="0 6 * * *",
 )
 
 defs = Definitions(

@@ -144,7 +144,7 @@ def _log_failure(run_id: str, step: str, duration: float) -> None:
     try:
         monitoring.log_run_metrics(run_id, step, 0, duration, status="failed")
     except Exception:
-        pass  # le journal ne doit jamais masquer l'erreur d'origine
+        pass
 
 
 def handle_pipeline_failure(step: str, error: Exception) -> None:

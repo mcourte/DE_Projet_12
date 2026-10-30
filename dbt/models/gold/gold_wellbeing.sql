@@ -1,12 +1,3 @@
--- Formule C : 5 jours bien-être si au moins 15 activités sur les
--- 12 derniers mois glissants (par rapport à la date du run).
-
--- Basé sur la liste COMPLÈTE des salariés (silver_employees_validated),
--- pas seulement ceux qui ont au moins une activité : un salarié sans
--- aucune activité doit obtenir 0/non-éligible, pas une ligne absente
--- (qui deviendrait NULL après la jointure dans gold_kpi.sql — ambigu
--- entre "non calculé" et "vraiment zéro").
-
 with activity_counts as (
     select
         id_salarie,

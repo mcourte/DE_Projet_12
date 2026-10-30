@@ -7,9 +7,6 @@ profile: 'sport_data_solution'
 model-paths: ["models"]
 test-paths: ["tests"]
 
-# Paramètres métier — dupliqués depuis config/config.yaml pour rester
-# accessibles en Jinja dans les modèles SQL. Idéalement synchronisés par
-# src/config.py au lancement du run (cf. src/orchestration/dagster_definitions.py).
 vars:
   taux_prime: 0.05
   seuil_activites_par_an: 15

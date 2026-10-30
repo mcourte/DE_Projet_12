@@ -30,8 +30,8 @@ def test_upsert_employee_referential_inserts_and_updates(monkeypatch):
     monkeypatch.setattr(load, "get_param", lambda key, default=None: None if "schema" in key else default)
 
     df = pd.DataFrame([
-        {"id_salarie": 1, "nom": "Renomme", "salaire_brut": 31000},  # update
-        {"id_salarie": 2, "nom": "Nouveau", "salaire_brut": 40000},  # insert
+        {"id_salarie": 1, "nom": "Renomme", "salaire_brut": 31000},
+        {"id_salarie": 2, "nom": "Nouveau", "salaire_brut": 40000},
     ])
     count = load.upsert_employee_referential(df)
     assert count == 2

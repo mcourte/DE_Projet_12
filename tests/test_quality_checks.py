@@ -26,8 +26,6 @@ def test_parse_dbt_run_results_no_failures_on_clean_fixtures(dbt_bronze_fixtures
 
 
 def test_run_dbt_tests_detects_invalid_moyen_deplacement(dbt_bronze_fixtures):
-    # Corrompt volontairement la fixture employees pour vérifier que le
-    # test accepted_values (schema.yml) est bien celui qui échoue.
     bad_employees = pd.DataFrame([{
         "id_salarie": 1, "nom": "X", "prenom": "Y", "bu": "Z",
         "date_embauche": "2020-01-01", "salaire_brut": 30000, "type_contrat": "CDI",

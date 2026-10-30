@@ -1,11 +1,3 @@
-# Valide chaque modification des modèles dbt en exécutant `dbt build` sur
-# DuckDB — aucun service externe requis (pas de Postgres/NATS à monter en
-# CI), donc rapide et sans dépendance réseau.
-#
-# Les données réelles (RH) ne sont pas versionnées : le workflow s'appuie
-# sur le petit jeu de test anonymisé de tests/fixtures/bronze/, copié dans
-# data/bronze/, et sur le target "ci" de dbt/profiles.yml.example.
-
 name: dbt-ci
 
 on:

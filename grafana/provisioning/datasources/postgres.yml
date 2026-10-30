@@ -1,8 +1,5 @@
 apiVersion: 1
 
-# Source de données créée automatiquement au démarrage de Grafana.
-# L'hôte est "postgres" (nom du service Docker Compose), pas "localhost" :
-# Grafana tourne dans son propre conteneur.
 datasources:
   - name: PostgreSQL sportdata
     uid: sportdata-postgres

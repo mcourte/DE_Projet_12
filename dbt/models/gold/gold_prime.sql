@@ -1,6 +1,3 @@
--- Formule B : prime sportive = 5% du salaire brut annuel, si mode de
--- déplacement actif déclaré ET distance validée par la formule A.
-
 select
     id_salarie,
     bu,

@@ -20,9 +20,6 @@ import pandas as pd
 from src.config import get_param
 from src.extract import _postgres_engine, qualified_table
 
-# Sports où une distance a un sens (cf. note de cadrage : "à laisser vide
-# si non pertinent, par exemple pour l'escalade"). Les valeurs viennent
-# du fichier Données Sportive réel (15 sports déclarés).
 _DISTANCE_RELEVANT_SPORTS = {
     "Randonnée": {"distance_km": (5, 20), "duree_min": (60, 240)},
     "Triathlon": {"distance_km": (10, 40), "duree_min": (60, 180)},
@@ -140,9 +137,6 @@ def generate_activity_history(
 
     rng = rng or random.Random(employee_id)
 
-    # Niveau d'activité propre au salarié : certains sont très réguliers,
-    # d'autres occasionnels — fait varier la fréquence, pas juste le nombre
-    # total, pour un historique plus crédible.
     activities_per_month = rng.uniform(0.5, 4.5)
 
     records = []

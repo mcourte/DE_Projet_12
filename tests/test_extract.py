@@ -49,7 +49,6 @@ def test_geocode_address_uses_cache(tmp_path, monkeypatch):
 
     assert coords1 == (43.6, 3.9)
     assert coords2 == coords1
-    # Le deuxième appel doit venir du cache, pas d'un nouvel appel API.
     assert client.calls == 1
 
 
@@ -118,7 +117,6 @@ def test_enrich_with_commute_distance_adds_km_column_and_caches(tmp_path, monkey
     assert list(result["distance_domicile_bureau_km"]) == [12.0, 12.0]
     assert client.calls == 2
 
-    # 2e passage : tout vient du cache, aucun nouvel appel API
     extract.enrich_with_commute_distance(_employees(["a", "b"]), _client=client)
     assert client.calls == 2
 
@@ -128,7 +126,7 @@ def test_enrich_with_commute_distance_tolerates_few_failures(tmp_path, monkeypat
     monkeypatch.setattr(extract, "_DISTANCE_CACHE_PATH", tmp_path / "dist.json")
     client = _FakeMapsClient(fail_addresses=["introuvable"])
 
-    addresses = [f"adresse {i}" for i in range(19)] + ["introuvable"]  # 5 % d'échec
+    addresses = [f"adresse {i}" for i in range(19)] + ["introuvable"]
     result = extract.enrich_with_commute_distance(_employees(addresses), _client=client)
 
     assert result["distance_domicile_bureau_km"].isna().sum() == 1
@@ -144,10 +142,10 @@ def test_enrich_with_commute_distance_raises_when_too_many_failures(tmp_path, mo
 
 
 def test_raise_if_too_many_failures_only_above_threshold():
-    extract._raise_if_too_many_failures(1, 20)  # 5 % : toléré
-    extract._raise_if_too_many_failures(0, 0)  # rien à traiter
+    extract._raise_if_too_many_failures(1, 20)
+    extract._raise_if_too_many_failures(0, 0)
     with pytest.raises(RuntimeError):
-        extract._raise_if_too_many_failures(3, 20)  # 15 % : trop
+        extract._raise_if_too_many_failures(3, 20)
 
 
 def test_resolve_distance_km_reads_cache_without_calling_api(monkeypatch):

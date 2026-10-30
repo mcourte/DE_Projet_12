@@ -36,8 +36,6 @@ _SPORT_COLUMNS = {
     "Pratique d'un sport": "pratique_sport",
 }
 
-# Mode de déplacement déclaré (fichier RH) -> mode attendu par l'API
-# Google Maps Distance Matrix.
 _MODE_TO_GOOGLE_TRAVEL_MODE = {
     "Marche/running": "walking",
     "Vélo/Trottinette/Autres": "bicycling",

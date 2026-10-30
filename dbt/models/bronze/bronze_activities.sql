@@ -1,6 +1,3 @@
--- Copie brute de l'historique d'activités (généré façon Strava par
--- src/generator.py, ou à terme importé depuis l'API Strava réelle).
-
 select
     id,
     id_salarie,
